@@ -12,5 +12,8 @@
     "src/**/*.tsx",
     "src/**/*.vue",
     "src/**/*.d.ts"
+  ],
+  "exclude": [
+    "src/views/**"
   ]
 }
