@@ -259,3 +259,41 @@ func (h *DictionaryHandler) ImportTZPoints(c *gin.Context) {
 
 	c.JSON(http.StatusOK, result)
 }
+
+func (h *DictionaryHandler) SearchContracts(c *gin.Context) {
+	search := strings.TrimSpace(c.Query("search"))
+
+	var items []models.ContractDictionary
+	query := h.db.Where("is_active = ?", true).Order("name asc").Limit(20)
+
+	if search != "" {
+		like := "%" + search + "%"
+		query = query.Where("name ILIKE ?", like)
+	}
+
+	if err := query.Find(&items).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения справочника ГК"})
+		return
+	}
+
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		result = append(result, item.Name)
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (h *DictionaryHandler) ListContracts(c *gin.Context) {
+	var items []models.ContractDictionary
+
+	if err := h.db.
+		Where("is_active = ?", true).
+		Order("name asc").
+		Find(&items).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения ГК"})
+		return
+	}
+
+	c.JSON(http.StatusOK, items)
+}

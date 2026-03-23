@@ -55,6 +55,7 @@ export interface Requirement {
   archivedAt?: string | null
   archivedBy?: string
   archivedByOrg?: string
+  contractName: string
 }
 
 export interface RequirementPayload {
@@ -70,4 +71,12 @@ export interface RequirementPayload {
   tzPointText: string
   statusText: string
   systemType: string
+  contractName: string
+}
+
+export interface ContractItem {
+  id: number
+  name: string
+  isActive: boolean
+  createdAt: string
 }

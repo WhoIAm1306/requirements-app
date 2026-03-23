@@ -93,6 +93,17 @@
             />
           </el-form-item>
 
+          <el-form-item label="ГК">
+            <el-autocomplete
+              v-model="form.contractName"
+              :fetch-suggestions="querySearchContracts"
+              placeholder="Выберите или введите ГК"
+              clearable
+              style="width: 100%"
+              :trigger-on-focus="true"
+            />
+          </el-form-item>
+
           <el-form-item label="Пункт ТЗ">
             <el-autocomplete
               v-model="form.tzPointText"
@@ -162,6 +173,7 @@ import { addRequirementComment, fetchRequirementById, updateRequirement } from '
 import { fetchTZPointSuggestions } from '@/api/dictionaries'
 import { createQueue, fetchQueues } from '@/api/queues'
 import type { QueueItem, Requirement, RequirementPayload } from '@/types'
+import { searchContracts } from '@/api/contracts'
 
 const props = defineProps<{
   modelValue: boolean
@@ -193,6 +205,7 @@ const form = reactive<RequirementPayload>({
   tzPointText: '',
   statusText: 'Новое',
   systemType: '112',
+  contractName: '',
 })
 
 function fillForm(data: Requirement) {
@@ -208,6 +221,7 @@ function fillForm(data: Requirement) {
   form.tzPointText = data.tzPointText || ''
   form.statusText = data.statusText || 'Новое'
   form.systemType = data.systemType || '112'
+  form.contractName = data.contractName || ''
 }
 
 async function loadQueues() {
@@ -330,6 +344,15 @@ function querySearchStatus(queryString: string, cb: (arg: Array<{ value: string 
     .map((item) => ({ value: item }))
 
   cb(results)
+}
+
+async function querySearchContracts(queryString: string, cb: (arg: Array<{ value: string }>) => void) {
+  try {
+    const data = await searchContracts(queryString)
+    cb(data.map((item) => ({ value: item })))
+  } catch {
+    cb([])
+  }
 }
 </script>
 

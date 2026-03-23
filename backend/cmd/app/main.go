@@ -81,6 +81,8 @@ func main() {
 
 		api.GET("/export/requirements", requirementHandler.ExportRequirements)
 
+		api.GET("/contracts", dictionaryHandler.ListContracts)
+		api.GET("/contracts/search", dictionaryHandler.SearchContracts)
 	}
 
 	log.Printf("backend started on :%s", cfg.AppPort)

@@ -36,6 +36,7 @@ type CreateRequirementRequest struct {
 	TZPointText         string `json:"tzPointText"`
 	StatusText          string `json:"statusText"`
 	SystemType          string `json:"systemType"`
+	ContractName        string `json:"contractName"`
 }
 
 type UpdateRequirementRequest struct {
@@ -51,6 +52,7 @@ type UpdateRequirementRequest struct {
 	TZPointText         string `json:"tzPointText"`
 	StatusText          string `json:"statusText"`
 	SystemType          string `json:"systemType"`
+	ContractName        string `json:"contractName"`
 }
 
 type AddCommentRequest struct {
@@ -186,6 +188,12 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		return
 	}
 
+	contractName := strings.TrimSpace(req.ContractName)
+	if err := h.ensureContractExists(contractName); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка сохранения ГК"})
+		return
+	}
+
 	userName := c.GetString("userName")
 	userOrg := c.GetString("userOrg")
 
@@ -231,6 +239,7 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		AuthorOrg:           userOrg,
 		LastEditedBy:        userName,
 		LastEditedOrg:       userOrg,
+		ContractName:        contractName,
 	}
 
 	if err := h.db.Create(&item).Error; err != nil {
@@ -243,6 +252,13 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 
 func (h *RequirementHandler) Update(c *gin.Context) {
 	var req UpdateRequirementRequest
+
+	contractName := strings.TrimSpace(req.ContractName)
+	if err := h.ensureContractExists(contractName); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка сохранения ГК"})
+		return
+	}
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный запрос"})
 		return
@@ -281,6 +297,7 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 
 	item.ShortName = strings.TrimSpace(req.ShortName)
 	item.Initiator = strings.TrimSpace(req.Initiator)
+	item.ContractName = contractName
 
 	if strings.TrimSpace(req.ResponsiblePerson) == "" {
 		item.ResponsiblePerson = userName
@@ -535,6 +552,13 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 			systemType = "112"
 		}
 
+		contractName := getCellByHeader(row, headerMap, "ГК", "Контракт", "Государственный контракт")
+		if err := h.ensureContractExists(contractName); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: ошибка сохранения ГК", lineNumber))
+			continue
+		}
+
 		item := models.Requirement{
 			TaskIdentifier:      taskIdentifier,
 			ShortName:           shortName,
@@ -553,6 +577,7 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 			AuthorOrg:           userOrg,
 			LastEditedBy:        userName,
 			LastEditedOrg:       userOrg,
+			ContractName:        contractName,
 		}
 
 		if err := h.db.Create(&item).Error; err != nil {
@@ -621,6 +646,7 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 		"Обсуждение",
 		"Номер очереди при реализации",
 		"Примечание",
+		"ГК",
 		"Пункт ТЗ",
 		"Статус",
 		"Система",
@@ -651,6 +677,7 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 			item.DiscussionSummary,
 			item.ImplementationQueue,
 			item.NoteText,
+			item.ContractName,
 			item.TZPointText,
 			item.StatusText,
 			item.SystemType,
@@ -739,4 +766,31 @@ func (h *RequirementHandler) Restore(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, item)
+}
+
+func (h *RequirementHandler) ensureContractExists(contractName string) error {
+	contractName = strings.TrimSpace(contractName)
+	if contractName == "" {
+		return nil
+	}
+
+	var existing models.ContractDictionary
+	err := h.db.Where("LOWER(name) = LOWER(?)", contractName).First(&existing).Error
+	if err == nil {
+		if existing.Name != contractName {
+			existing.Name = contractName
+			return h.db.Save(&existing).Error
+		}
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	item := models.ContractDictionary{
+		Name:     contractName,
+		IsActive: true,
+	}
+
+	return h.db.Create(&item).Error
 }

@@ -28,6 +28,7 @@ type Requirement struct {
 	ArchivedAt          *time.Time `json:"archivedAt"`
 	ArchivedBy          string     `gorm:"size:255" json:"archivedBy"`
 	ArchivedByOrg       string     `gorm:"size:50" json:"archivedByOrg"`
+	ContractName        string     `gorm:"size:255;index" json:"contractName"`
 }
 
 type Comment struct {
@@ -57,6 +58,13 @@ type QueueDictionary struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	Number    int       `gorm:"uniqueIndex" json:"number"`
 	Name      string    `gorm:"size:100;uniqueIndex" json:"name"`
+	IsActive  bool      `gorm:"default:true" json:"isActive"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type ContractDictionary struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Name      string    `gorm:"size:255;uniqueIndex" json:"name"`
 	IsActive  bool      `gorm:"default:true" json:"isActive"`
 	CreatedAt time.Time `json:"createdAt"`
 }

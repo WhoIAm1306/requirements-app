@@ -158,17 +158,26 @@
               width="180"
               show-overflow-tooltip
             />
-            <el-table-column
-              prop="implementationQueue"
-              label="Очередь"
-              width="130"
-            />
+            <el-table-column prop="implementationQueue" label="Очередь" width="130">
+              <template #default="{ row }">
+                <QueueTag :queue="row.implementationQueue" />
+              </template>
+            </el-table-column>
             <el-table-column prop="statusText" label="Статус" width="150">
               <template #default="{ row }">
                 <StatusTag :status="row.statusText" />
               </template>
             </el-table-column>
+
             <el-table-column prop="systemType" label="Система" width="100" />
+
+            <el-table-column
+              prop="contractName"
+              label="ГК"
+              width="180"
+              show-overflow-tooltip
+            />
+
             <el-table-column
               prop="tzPointText"
               label="Пункт ТЗ"
@@ -279,6 +288,7 @@ import ImportExcelDialog from '@/components/ImportExcelDialog.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import type { QueueItem, Requirement } from '@/types'
 import { fetchQueues } from '@/api/queues'
+import QueueTag from '@/components/QueueTag.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

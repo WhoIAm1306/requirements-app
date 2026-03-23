@@ -90,7 +90,16 @@
           </el-form-item>
         </el-col>
       </el-row>
-
+      <el-form-item label="ГК">
+        <el-autocomplete
+          v-model="form.contractName"
+          :fetch-suggestions="querySearchContracts"
+          placeholder="Выберите или введите ГК"
+          clearable
+          style="width: 100%"
+          :trigger-on-focus="true"
+          />
+      </el-form-item>
       <el-form-item label="Пункт ТЗ">
         <el-autocomplete
           v-model="form.tzPointText"
@@ -120,6 +129,7 @@ import { fetchTZPointSuggestions } from '@/api/dictionaries'
 import { createQueue, fetchQueues } from '@/api/queues'
 import { useAuthStore } from '@/stores/auth'
 import type { QueueItem, RequirementPayload } from '@/types'
+import { searchContracts } from '@/api/contracts'
 
 const props = defineProps<{
   modelValue: boolean
@@ -147,6 +157,7 @@ const emptyForm = (): RequirementPayload => ({
   tzPointText: '',
   statusText: 'Новое',
   systemType: '112',
+  contractName: '',
 })
 
 const form = reactive<RequirementPayload>(emptyForm())
@@ -233,6 +244,14 @@ function querySearchStatus(queryString: string, cb: (arg: Array<{ value: string 
   cb(results)
 }
 
+async function querySearchContracts(queryString: string, cb: (arg: Array<{ value: string }>) => void) {
+  try {
+    const data = await searchContracts(queryString)
+    cb(data.map((item) => ({ value: item })))
+  } catch {
+    cb([])
+  }
+}
 </script>
 
 <style scoped>
