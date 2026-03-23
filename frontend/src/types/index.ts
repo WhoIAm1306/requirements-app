@@ -1,17 +1,69 @@
-export type Organization = 'ДИТ' | '112' | '101' | 'Танто-С'
+// Базовые словари и типы приложения.
 
-export interface LoginPayload {
+export type Organization = 'ДИТ' | '112' | '101' | 'Танто-С'
+export type AccessLevel = 'read' | 'edit'
+
+// Профиль текущего пользователя.
+export interface UserProfile {
+  id: number
   fullName: string
-  organization: Organization
+  organization: Organization | string
+  email: string
+  accessLevel: AccessLevel
+  isSuperuser: boolean
+  isActive: boolean
+}
+
+// Логин по корпоративной почте.
+export interface LoginPayload {
+  email: string
   password: string
 }
 
+// Ответ логина.
 export interface LoginResponse {
-  token: string
-  fullName: string
-  organization: Organization
+  accessToken: string
+  profile: UserProfile
 }
 
+// Смена собственного пароля.
+export interface ChangePasswordPayload {
+  currentPassword: string
+  newPassword: string
+}
+
+// Пользователь в административной панели.
+export interface AdminUser {
+  id: number
+  fullName: string
+  organization: Organization | string
+  email: string
+  accessLevel: AccessLevel
+  isSuperuser: boolean
+  isActive: boolean
+  createdAt: string
+}
+
+// Создание пользователя.
+export interface CreateAdminUserPayload {
+  fullName: string
+  organization: Organization | string
+  email: string
+  password: string
+  accessLevel: AccessLevel
+  isActive: boolean
+}
+
+// Обновление пользователя.
+export interface UpdateAdminUserPayload {
+  fullName: string
+  organization: Organization | string
+  email: string
+  accessLevel: AccessLevel
+  isActive: boolean
+}
+
+// Элемент очереди.
 export interface QueueItem {
   id: number
   number: number
@@ -20,6 +72,15 @@ export interface QueueItem {
   createdAt: string
 }
 
+// Элемент договора / ГК.
+export interface ContractItem {
+  id: number
+  name: string
+  isActive: boolean
+  createdAt: string
+}
+
+// Комментарий предложения.
 export interface CommentItem {
   id: number
   requirementId: number
@@ -29,6 +90,7 @@ export interface CommentItem {
   createdAt: string
 }
 
+// Карточка предложения.
 export interface Requirement {
   id: number
   taskIdentifier: string
@@ -40,6 +102,7 @@ export interface Requirement {
   problemComment: string
   discussionSummary: string
   implementationQueue: string
+  contractName: string
   noteText: string
   tzPointText: string
   statusText: string
@@ -50,14 +113,14 @@ export interface Requirement {
   updatedAt: string
   lastEditedBy: string
   lastEditedOrg: string
-  comments?: CommentItem[]
   isArchived: boolean
   archivedAt?: string | null
   archivedBy?: string
   archivedByOrg?: string
-  contractName: string
+  comments?: CommentItem[]
 }
 
+// Payload для создания/обновления предложения.
 export interface RequirementPayload {
   shortName: string
   initiator: string
@@ -67,16 +130,9 @@ export interface RequirementPayload {
   problemComment: string
   discussionSummary: string
   implementationQueue: string
+  contractName: string
   noteText: string
   tzPointText: string
   statusText: string
   systemType: string
-  contractName: string
-}
-
-export interface ContractItem {
-  id: number
-  name: string
-  isActive: boolean
-  createdAt: string
 }

@@ -1,29 +1,13 @@
 <template>
   <div class="login-page">
-    <el-card class="login-card">
+    <el-card class="login-card" shadow="hover">
       <template #header>
-        <div class="login-title">Вход в систему</div>
+        <div class="login-title">Вход</div>
       </template>
 
       <div class="form-block">
-        <div class="label">Организация</div>
-        <el-radio-group v-model="form.organization" size="large">
-          <el-radio-button label="ДИТ" value="ДИТ" />
-          <el-radio-button label="112" value="112" />
-          <el-radio-button label="101" value="101" />
-          <el-radio-button label="Танто-С" value="Танто-С" />
-        </el-radio-group>
-      </div>
-
-      <div class="form-block">
-        <div class="label">ФИО</div>
-        <el-autocomplete
-          v-model="form.fullName"
-          :fetch-suggestions="querySearchAuthors"
-          placeholder="Введите ФИО"
-          clearable
-          style="width: 100%"
-        />
+        <div class="label">Почта</div>
+        <el-input v-model="form.email" placeholder="Введите почту" clearable />
       </div>
 
       <div class="form-block">
@@ -43,39 +27,30 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { login } from '@/api/auth'
-import { fetchAuthorSuggestions } from '@/api/dictionaries'
 import { useAuthStore } from '@/stores/auth'
-import type { Organization } from '@/types'
 
+// Router нужен для перехода после успешного логина.
 const router = useRouter()
+
+// Pinia-store авторизации.
 const authStore = useAuthStore()
+
+// Флаг кнопки "Войти".
 const loading = ref(false)
 
-const form = reactive<{
-  organization: Organization
-  fullName: string
-  password: string
-}>({
-  organization: 'ДИТ',
-  fullName: '',
+// Форма логина.
+const form = reactive({
+  email: '',
   password: '',
 })
 
-async function querySearchAuthors(queryString: string, cb: (arg: Array<{ value: string }>) => void) {
-  try {
-    const data = await fetchAuthorSuggestions(queryString)
-    cb(data.map((item) => ({ value: item })))
-  } catch {
-    cb([])
-  }
-}
-
+// Выполняем логин через backend и сохраняем JWT.
 async function handleLogin() {
   try {
     loading.value = true
+
     const data = await login({
-      organization: form.organization,
-      fullName: form.fullName,
+      email: form.email,
       password: form.password,
     })
 
@@ -96,16 +71,19 @@ async function handleLogin() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f5f7fa;
+  background:
+    radial-gradient(circle at top left, #f4f8ff 0%, #f7f9fc 35%, #f3f5f8 100%);
+  padding: 24px;
 }
 
 .login-card {
   width: 460px;
+  border-radius: 18px;
 }
 
 .login-title {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .form-block {

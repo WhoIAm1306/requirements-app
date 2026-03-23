@@ -1,26 +1,36 @@
 import axios from 'axios'
 
-function encodeHeaderValue(value: string) {
-  return btoa(unescape(encodeURIComponent(value)))
-}
-
+// Общий axios-клиент для всего приложения.
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
 })
 
+// Перед каждым запросом автоматически подставляем Bearer token.
 apiClient.interceptors.request.use((config) => {
-  const fullName = localStorage.getItem('fullName')
-  const organization = localStorage.getItem('organization')
+  const token = localStorage.getItem('accessToken')
 
-  if (fullName) {
-    config.headers['X-User-Name'] = encodeHeaderValue(fullName)
-  }
-
-  if (organization) {
-    config.headers['X-User-Org'] = encodeHeaderValue(organization)
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
   }
 
   return config
 })
+
+// На 401 очищаем локальную сессию и отправляем на логин.
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) {
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('profile')
+
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+    }
+
+    return Promise.reject(error)
+  },
+)
 
 export default apiClient

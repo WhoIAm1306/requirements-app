@@ -1,41 +1,62 @@
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import type { Organization } from '@/types'
+import type { LoginResponse, UserProfile } from '@/types'
 
+// Pinia-store с JWT и профилем пользователя.
 export const useAuthStore = defineStore('auth', () => {
-  const fullName = ref(localStorage.getItem('fullName') || '')
-  const organization = ref((localStorage.getItem('organization') as Organization) || 'ДИТ')
-  const token = ref(localStorage.getItem('token') || '')
+  // Токен живёт в localStorage, чтобы сессия переживала перезагрузку страницы.
+  const token = ref(localStorage.getItem('accessToken') || '')
 
-  function setAuth(payload: { fullName: string; organization: Organization; token: string }) {
-    fullName.value = payload.fullName
-    organization.value = payload.organization
-    token.value = payload.token
+  // Профиль также кэшируем в localStorage.
+  const rawProfile = localStorage.getItem('profile')
+  const profile = ref<UserProfile | null>(rawProfile ? JSON.parse(rawProfile) : null)
 
-    localStorage.setItem('fullName', payload.fullName)
-    localStorage.setItem('organization', payload.organization)
-    localStorage.setItem('token', payload.token)
+  // Совместимость со старым кодом в формах.
+  const fullName = computed(() => profile.value?.fullName || '')
+  const organization = computed(() => profile.value?.organization || '')
+  const email = computed(() => profile.value?.email || '')
+  const isSuperuser = computed(() => Boolean(profile.value?.isSuperuser))
+  const accessLevel = computed(() => profile.value?.accessLevel || 'read')
+
+  // Установка сессии после логина.
+  function setAuth(payload: LoginResponse) {
+    token.value = payload.accessToken
+    profile.value = payload.profile
+
+    localStorage.setItem('accessToken', payload.accessToken)
+    localStorage.setItem('profile', JSON.stringify(payload.profile))
   }
 
+  // Обновление профиля без смены токена.
+  function setProfile(value: UserProfile) {
+    profile.value = value
+    localStorage.setItem('profile', JSON.stringify(value))
+  }
+
+  // Полный logout.
   function logout() {
-    fullName.value = ''
-    organization.value = 'ДИТ'
     token.value = ''
+    profile.value = null
 
-    localStorage.removeItem('fullName')
-    localStorage.removeItem('organization')
-    localStorage.removeItem('token')
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('profile')
   }
 
+  // Проверка авторизации.
   function isAuthenticated() {
-    return Boolean(fullName.value && organization.value)
+    return Boolean(token.value)
   }
 
   return {
+    token,
+    profile,
     fullName,
     organization,
-    token,
+    email,
+    accessLevel,
+    isSuperuser,
     setAuth,
+    setProfile,
     logout,
     isAuthenticated,
   }

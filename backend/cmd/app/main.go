@@ -3,86 +3,136 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"requirements-app/backend/internal/config"
 	"requirements-app/backend/internal/db"
 	"requirements-app/backend/internal/handlers"
 	"requirements-app/backend/internal/middleware"
+	"requirements-app/backend/internal/security"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
+	// Загружаем конфигурацию приложения.
 	cfg := config.Load()
 
+	// Подключаемся к базе данных.
 	database, err := db.NewPostgres(cfg)
 	if err != nil {
 		log.Fatal("db connection error: ", err)
 	}
 
-	authHandler := handlers.NewAuthHandler(cfg)
+	// Инициализируем JWT-сервис.
+	jwtService := security.NewJWTService(cfg.JWTSecret)
+
+	// Создаём handlers.
+	authHandler := handlers.NewAuthHandler(database, jwtService)
+	userHandler := handlers.NewUserHandler(database)
 	requirementHandler := handlers.NewRequirementHandler(database)
 	dictionaryHandler := handlers.NewDictionaryHandler(database)
 
+	// Создаём gin router.
 	r := gin.Default()
 
+	// Разрешённые origin для фронтенда.
 	allowedOrigins := []string{"http://localhost:5173"}
 	if cfg.FrontendOrigin != "" && cfg.FrontendOrigin != "http://localhost:5173" {
 		allowedOrigins = append(allowedOrigins, cfg.FrontendOrigin)
 	}
 
+	// Настраиваем CORS.
 	r.Use(cors.New(cors.Config{
-		AllowOrigins: allowedOrigins,
-		AllowMethods: []string{
-			"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS",
-		},
-		AllowHeaders: []string{
-			"Origin",
-			"Content-Type",
-			"Accept",
-			"Authorization",
-			"X-User-Name",
-			"X-User-Org",
-		},
-		ExposeHeaders: []string{
-			"Content-Length",
-		},
+		AllowOrigins:     allowedOrigins,
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
 
+	// Health-check.
 	r.GET("/api/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "ok"})
 	})
 
-	r.POST("/api/auth/login", authHandler.Login)
-
+	// Общая группа API.
 	api := r.Group("/api")
-	api.Use(middleware.SimpleAuthMiddleware())
+
+	// Публичный логин.
+	api.POST("/auth/login", authHandler.Login)
+
+	// Базовая JWT-авторизация.
+	authMw := middleware.RequireAuth(jwtService, database)
+
+	// Read-only маршруты доступны всем авторизованным пользователям.
+	read := api.Group("")
+	read.Use(authMw)
 	{
-		api.GET("/requirements", requirementHandler.List)
-		api.GET("/requirements/:id", requirementHandler.GetByID)
-		api.POST("/requirements", requirementHandler.Create)
-		api.PUT("/requirements/:id", requirementHandler.Update)
-		api.POST("/requirements/:id/comments", requirementHandler.AddComment)
-		api.POST("/requirements/:id/archive", requirementHandler.Archive)
-		api.POST("/requirements/:id/restore", requirementHandler.Restore)
+		read.GET("/auth/me", authHandler.Me)
+		read.POST("/auth/change-password", authHandler.ChangePassword)
 
-		api.GET("/authors", dictionaryHandler.SearchAuthors)
-		api.GET("/tz-points", dictionaryHandler.SearchTZPoints)
+		read.GET("/requirements", requirementHandler.List)
+		read.GET("/requirements/:id", requirementHandler.GetByID)
+		read.GET("/export/requirements", requirementHandler.ExportRequirements)
 
-		api.GET("/queues", dictionaryHandler.ListQueues)
-		api.POST("/queues", dictionaryHandler.CreateQueue)
+		read.GET("/authors", dictionaryHandler.SearchAuthors)
+		read.GET("/tz-points", dictionaryHandler.SearchTZPoints)
+		read.GET("/contracts", dictionaryHandler.ListContracts)
+		read.GET("/contracts/search", dictionaryHandler.SearchContracts)
+		read.GET("/queues", dictionaryHandler.ListQueues)
+	}
 
-		api.POST("/import/requirements", requirementHandler.ImportRequirements)
-		api.POST("/import/tz-points", dictionaryHandler.ImportTZPoints)
+	// Маршруты изменения данных доступны только edit-пользователю или суперпользователю.
+	edit := api.Group("")
+	edit.Use(authMw, middleware.RequireEditOrSuperuser())
+	{
+		edit.POST("/requirements", requirementHandler.Create)
+		edit.PUT("/requirements/:id", requirementHandler.Update)
+		edit.POST("/requirements/:id/comments", requirementHandler.AddComment)
+		edit.POST("/requirements/:id/archive", requirementHandler.Archive)
+		edit.POST("/requirements/:id/restore", requirementHandler.Restore)
 
-		api.GET("/export/requirements", requirementHandler.ExportRequirements)
+		edit.POST("/queues", dictionaryHandler.CreateQueue)
 
-		api.GET("/contracts", dictionaryHandler.ListContracts)
-		api.GET("/contracts/search", dictionaryHandler.SearchContracts)
+		edit.POST("/import/requirements", requirementHandler.ImportRequirements)
+		edit.POST("/import/tz-points", dictionaryHandler.ImportTZPoints)
+	}
+
+	// Административные маршруты только для суперпользователя.
+	// ВАЖНО: смена пароля другого пользователя тут больше НЕ доступна.
+	admin := api.Group("/admin")
+	admin.Use(authMw, middleware.RequireSuperuser())
+	{
+		admin.GET("/users", userHandler.ListUsers)
+		admin.POST("/users", userHandler.CreateUser)
+		admin.PUT("/users/:id", userHandler.UpdateUser)
+	}
+
+	// Раздача собранного фронтенда, если он существует.
+	frontendDist := "./frontend-dist"
+
+	if _, err := os.Stat(filepath.Join(frontendDist, "index.html")); err == nil {
+		r.Static("/assets", filepath.Join(frontendDist, "assets"))
+
+		faviconPath := filepath.Join(frontendDist, "favicon.ico")
+		if _, err := os.Stat(faviconPath); err == nil {
+			r.StaticFile("/favicon.ico", faviconPath)
+		}
+
+		r.NoRoute(func(c *gin.Context) {
+			if strings.HasPrefix(c.Request.URL.Path, "/api") {
+				c.JSON(http.StatusNotFound, gin.H{"message": "Маршрут не найден"})
+				return
+			}
+
+			c.File(filepath.Join(frontendDist, "index.html"))
+		})
 	}
 
 	log.Printf("backend started on :%s", cfg.AppPort)

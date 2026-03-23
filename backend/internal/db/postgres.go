@@ -1,18 +1,20 @@
 package db
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"strings"
 
 	"requirements-app/backend/internal/config"
 	"requirements-app/backend/internal/models"
 
-	"errors"
-
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
+// NewPostgres создаёт подключение к PostgreSQL, прогоняет миграции и сиды.
 func NewPostgres(cfg *config.Config) (*gorm.DB, error) {
 	dsn := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
@@ -36,6 +38,7 @@ func NewPostgres(cfg *config.Config) (*gorm.DB, error) {
 		&models.AuthorDictionary{},
 		&models.QueueDictionary{},
 		&models.ContractDictionary{},
+		&models.User{},
 	)
 	if err != nil {
 		return nil, err
@@ -45,10 +48,15 @@ func NewPostgres(cfg *config.Config) (*gorm.DB, error) {
 		return nil, err
 	}
 
+	if err := seedSuperuser(database, cfg); err != nil {
+		return nil, err
+	}
+
 	log.Println("database connected and migrated")
 	return database, nil
 }
 
+// seedDefaultQueues создаёт стандартные очереди, если их ещё нет.
 func seedDefaultQueues(db *gorm.DB) error {
 	defaults := []models.QueueDictionary{
 		{Number: 1, Name: "1 очередь", IsActive: true},
@@ -71,4 +79,38 @@ func seedDefaultQueues(db *gorm.DB) error {
 	}
 
 	return nil
+}
+
+// seedSuperuser создаёт стартового суперпользователя.
+func seedSuperuser(db *gorm.DB, cfg *config.Config) error {
+	email := strings.TrimSpace(strings.ToLower(cfg.SuperuserEmail))
+	if email == "" {
+		return nil
+	}
+
+	var existing models.User
+	err := db.Where("LOWER(email) = ?", email).First(&existing).Error
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(cfg.SuperuserPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	user := models.User{
+		FullName:     cfg.SuperuserFullName,
+		Organization: cfg.SuperuserOrganization,
+		Email:        email,
+		PasswordHash: string(passwordHash),
+		AccessLevel:  "edit",
+		IsSuperuser:  true,
+		IsActive:     true,
+	}
+
+	return db.Create(&user).Error
 }

@@ -1,0 +1,28 @@
+import apiClient from './client'
+import type { AdminUser, CreateAdminUserPayload, UpdateAdminUserPayload } from '@/types'
+
+// Список пользователей для административной панели.
+export async function fetchAdminUsers() {
+  const { data } = await apiClient.get<AdminUser[]>('/admin/users')
+  return data
+}
+
+// Создание пользователя.
+export async function createAdminUser(payload: CreateAdminUserPayload) {
+  const { data } = await apiClient.post<AdminUser>('/admin/users', payload)
+  return data
+}
+
+// Обновление пользователя.
+export async function updateAdminUser(id: number, payload: UpdateAdminUserPayload) {
+  const { data } = await apiClient.put<AdminUser>(`/admin/users/${id}`, payload)
+  return data
+}
+
+// Смена пароля выбранного пользователя администратором.
+export async function changeAdminUserPassword(id: number, newPassword: string) {
+  const { data } = await apiClient.post<{ message: string }>(`/admin/users/${id}/change-password`, {
+    newPassword,
+  })
+  return data
+}

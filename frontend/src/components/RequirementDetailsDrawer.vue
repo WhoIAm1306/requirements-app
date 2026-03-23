@@ -1,162 +1,266 @@
 <template>
   <el-drawer
     :model-value="modelValue"
-    title="Карточка предложения"
-    size="55%"
+    size="920px"
+    :title="drawerTitle"
     @close="emit('update:modelValue', false)"
   >
-    <div v-loading="loading">
+    <div v-loading="loading" class="drawer-body">
       <template v-if="item">
-        <el-form label-position="top">
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <el-form-item label="Идентификатор задачи">
-                <el-input :model-value="item.taskIdentifier" disabled />
-              </el-form-item>
-            </el-col>
-
-            <el-col :span="12">
-              <el-form-item label="Система">
-                <el-select v-model="form.systemType" style="width: 100%">
-                  <el-option label="Система 112" value="112" />
-                  <el-option label="Система 101" value="101" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <el-form-item label="Краткое наименование предложения">
-            <el-input v-model="form.shortName" />
-          </el-form-item>
-
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <el-form-item label="Инициатор предложения">
-                <el-input v-model="form.initiator" />
-              </el-form-item>
-            </el-col>
-
-            <el-col :span="12">
-              <el-form-item label="Ответственный за предложение">
-                <el-input v-model="form.responsiblePerson" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <el-form-item label="Условное разделение">
-            <el-input v-model="form.sectionName" />
-          </el-form-item>
-
-          <el-form-item label="Предложение">
-            <el-input v-model="form.proposalText" type="textarea" :rows="4" />
-          </el-form-item>
-
-          <el-form-item label="Комментарии и описание проблем">
-            <el-input v-model="form.problemComment" type="textarea" :rows="4" />
-          </el-form-item>
-
-          <el-form-item label="Обсуждение (кратко)">
-            <el-input v-model="form.discussionSummary" type="textarea" :rows="3" />
-          </el-form-item>
-
-          <el-row :gutter="16">
-            <el-col :span="16">
-              <el-form-item label="Номер очереди при реализации">
-                <el-select v-model="form.implementationQueue" style="width: 100%">
-                  <el-option
-                    v-for="queue in queues"
-                    :key="queue.id"
-                    :label="queue.name"
-                    :value="queue.name"
-                  />
-
-                  <template #footer>
-                    <div class="queue-select-footer">
-                      <el-button text bg size="small" @click="openAddQueueDialog">
-                        Добавить очередь
-                      </el-button>
-                    </div>
-                  </template>
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <el-form-item label="Статус">
-            <el-autocomplete
-              v-model="form.statusText"
-              :fetch-suggestions="querySearchStatus"
-              placeholder="Введите статус"
-              clearable
-              style="width: 100%"
-              :trigger-on-focus="true"
-            />
-          </el-form-item>
-
-          <el-form-item label="ГК">
-            <el-autocomplete
-              v-model="form.contractName"
-              :fetch-suggestions="querySearchContracts"
-              placeholder="Выберите или введите ГК"
-              clearable
-              style="width: 100%"
-              :trigger-on-focus="true"
-            />
-          </el-form-item>
-
-          <el-form-item label="Пункт ТЗ">
-            <el-autocomplete
-              v-model="form.tzPointText"
-              :fetch-suggestions="querySearchTZ"
-              placeholder="Выберите или введите свой вариант"
-              style="width: 100%"
-            />
-          </el-form-item>
-
-          <el-form-item label="Примечание">
-            <el-input v-model="form.noteText" type="textarea" :rows="3" />
-          </el-form-item>
-        </el-form>
-
-        <div class="service-meta">
-          <div><strong>Создал:</strong> {{ item.authorName }} ({{ item.authorOrg }})</div>
-          <div><strong>Дата создания:</strong> {{ formatDate(item.createdAt) }}</div>
-          <div><strong>Последнее изменение:</strong> {{ item.lastEditedBy }} ({{ item.lastEditedOrg }})</div>
-          <div><strong>Дата изменения:</strong> {{ formatDate(item.updatedAt) }}</div>
-          <div v-if="item.isArchived"><strong>В архиве:</strong> Да</div>
-          <div v-if="item.archivedBy"><strong>Архивировал:</strong> {{ item.archivedBy }} ({{ item.archivedByOrg }})</div>
-          <div v-if="item.archivedAt"><strong>Дата архивирования:</strong> {{ formatDate(item.archivedAt) }}</div>
-        </div>
-
-        <div class="drawer-actions">
-          <el-button type="primary" :loading="saving" @click="save">Сохранить изменения</el-button>
-        </div>
-
-        <div class="comments-block">
-          <h3>Обсуждение</h3>
-
-          <div v-if="item.comments?.length" class="comments-list">
-            <el-card v-for="comment in item.comments" :key="comment.id" class="comment-card">
-              <div class="comment-meta">
-                <strong>{{ comment.authorName }}</strong>
-                <span>({{ comment.authorOrg }})</span>
-                <span>{{ formatDate(comment.createdAt) }}</span>
-              </div>
-              <div class="comment-text">{{ comment.commentText }}</div>
-            </el-card>
+        <!--
+          Верхняя панель карточки.
+          Для read-only пользователя здесь нет кнопок изменения.
+        -->
+        <div class="top-bar">
+          <div class="meta-block">
+            <div class="meta-line"><span class="meta-label">ID:</span> {{ item.taskIdentifier }}</div>
+            <div class="meta-line"><span class="meta-label">Автор:</span> {{ item.authorName }}</div>
+            <div class="meta-line"><span class="meta-label">Организация автора:</span> {{ item.authorOrg }}</div>
+            <div class="meta-line"><span class="meta-label">Создано:</span> {{ formatDateTime(item.createdAt) }}</div>
           </div>
 
-          <el-empty v-else description="Комментариев пока нет" />
+          <div v-if="canEdit" class="top-actions">
+            <el-button type="primary" :loading="saveLoading" @click="handleSave">
+              Сохранить
+            </el-button>
 
-          <el-input
-            v-model="newComment"
-            type="textarea"
-            :rows="4"
-            placeholder="Введите комментарий"
+            <el-button
+              v-if="!item.isArchived"
+              type="warning"
+              :loading="actionLoading"
+              @click="handleArchive"
+            >
+              В архив
+            </el-button>
+
+            <el-button
+              v-else
+              type="success"
+              :loading="actionLoading"
+              @click="handleRestore"
+            >
+              Восстановить
+            </el-button>
+          </div>
+        </div>
+
+        <el-divider />
+
+        <!--
+          Режим редактирования:
+          поля доступны только пользователю с правом edit / superuser.
+        -->
+        <template v-if="canEdit">
+          <el-form label-position="top" class="details-form">
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item label="Краткое наименование предложения">
+                  <el-input v-model="form.shortName" />
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="12">
+                <el-form-item label="Инициатор">
+                  <el-input v-model="form.initiator" />
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="12">
+                <el-form-item label="Ответственный">
+                  <el-input v-model="form.responsiblePerson" />
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="12">
+                <el-form-item label="Раздел">
+                  <el-input v-model="form.sectionName" />
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="12">
+                <el-form-item label="Очередь">
+                  <el-select v-model="form.implementationQueue" style="width: 100%">
+                    <el-option
+                      v-for="queue in queues"
+                      :key="queue.id"
+                      :label="queue.name"
+                      :value="queue.name"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="12">
+                <el-form-item label="ГК">
+                  <el-input v-model="form.contractName" />
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="12">
+                <el-form-item label="Статус">
+                  <el-select
+                    v-model="form.statusText"
+                    style="width: 100%"
+                    filterable
+                    allow-create
+                    default-first-option
+                  >
+                    <el-option label="Новое" value="Новое" />
+                    <el-option label="Учтено" value="Учтено" />
+                    <el-option label="Выполнено" value="Выполнено" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="12">
+                <el-form-item label="Система">
+                  <el-select v-model="form.systemType" style="width: 100%">
+                    <el-option label="112" value="112" />
+                    <el-option label="101" value="101" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="24">
+                <el-form-item label="Предложение">
+                  <el-input v-model="form.proposalText" type="textarea" :rows="4" />
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="24">
+                <el-form-item label="Комментарии и описание проблем">
+                  <el-input v-model="form.problemComment" type="textarea" :rows="4" />
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="24">
+                <el-form-item label="Обсуждение">
+                  <el-input v-model="form.discussionSummary" type="textarea" :rows="4" />
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="12">
+                <el-form-item label="Пункт ТЗ">
+                  <el-input v-model="form.tzPointText" />
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="12">
+                <el-form-item label="Примечание">
+                  <el-input v-model="form.noteText" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </el-form>
+        </template>
+
+        <!--
+          Read-only режим:
+          инпутов нет вообще, только просмотр данных.
+        -->
+        <template v-else>
+          <div class="readonly-grid">
+            <div class="readonly-card">
+              <div class="readonly-label">Краткое наименование предложения</div>
+              <div class="readonly-value">{{ item.shortName || '—' }}</div>
+            </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">Инициатор</div>
+              <div class="readonly-value">{{ item.initiator || '—' }}</div>
+            </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">Ответственный</div>
+              <div class="readonly-value">{{ item.responsiblePerson || '—' }}</div>
+            </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">Раздел</div>
+              <div class="readonly-value">{{ item.sectionName || '—' }}</div>
+            </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">Очередь</div>
+              <div class="readonly-value">{{ item.implementationQueue || '—' }}</div>
+            </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">ГК</div>
+              <div class="readonly-value">{{ item.contractName || '—' }}</div>
+            </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">Статус</div>
+              <div class="readonly-value">{{ item.statusText || '—' }}</div>
+            </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">Система</div>
+              <div class="readonly-value">{{ item.systemType || '—' }}</div>
+            </div>
+
+            <div class="readonly-card full">
+              <div class="readonly-label">Предложение</div>
+              <div class="readonly-value">{{ item.proposalText || '—' }}</div>
+            </div>
+
+            <div class="readonly-card full">
+              <div class="readonly-label">Комментарии и описание проблем</div>
+              <div class="readonly-value">{{ item.problemComment || '—' }}</div>
+            </div>
+
+            <div class="readonly-card full">
+              <div class="readonly-label">Обсуждение</div>
+              <div class="readonly-value">{{ item.discussionSummary || '—' }}</div>
+            </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">Пункт ТЗ</div>
+              <div class="readonly-value">{{ item.tzPointText || '—' }}</div>
+            </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">Примечание</div>
+              <div class="readonly-value">{{ item.noteText || '—' }}</div>
+            </div>
+          </div>
+        </template>
+
+        <el-divider />
+
+        <!-- Комментарии -->
+        <div class="comments-title">Комментарии</div>
+
+        <div class="comments-list">
+          <el-empty
+            v-if="!item.comments || item.comments.length === 0"
+            description="Комментариев пока нет"
           />
 
-          <div class="comment-actions">
-            <el-button type="primary" :loading="commentLoading" @click="sendComment">
+          <div v-else class="comment-card" v-for="comment in item.comments" :key="comment.id">
+            <div class="comment-header">
+              <div class="comment-author">
+                {{ comment.authorName }} · {{ comment.authorOrg }}
+              </div>
+              <div class="comment-date">{{ formatDateTime(comment.createdAt) }}</div>
+            </div>
+            <div class="comment-text">{{ comment.commentText }}</div>
+          </div>
+        </div>
+
+        <!--
+          Добавление нового комментария доступно только edit-пользователю.
+        -->
+        <div v-if="canEdit" class="comment-editor">
+          <el-input
+            v-model="newCommentText"
+            type="textarea"
+            :rows="3"
+            placeholder="Введите комментарий"
+          />
+          <div class="comment-editor-actions">
+            <el-button type="primary" :loading="commentLoading" @click="handleAddComment">
               Добавить комментарий
             </el-button>
           </div>
@@ -167,31 +271,80 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { addRequirementComment, fetchRequirementById, updateRequirement } from '@/api/requirements'
-import { fetchTZPointSuggestions } from '@/api/dictionaries'
-import { createQueue, fetchQueues } from '@/api/queues'
+import { computed, reactive, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
+import { fetchQueues } from '@/api/queues'
+import {
+  addRequirementComment,
+  archiveRequirement,
+  fetchRequirementById,
+  restoreRequirement,
+  updateRequirement,
+} from '@/api/requirements'
 import type { QueueItem, Requirement, RequirementPayload } from '@/types'
-import { searchContracts } from '@/api/contracts'
 
+/**
+ * Props drawer.
+ */
 const props = defineProps<{
   modelValue: boolean
   requirementId: number | null
 }>()
 
+/**
+ * Events.
+ */
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
   (e: 'updated'): void
 }>()
 
+/**
+ * Store текущего пользователя.
+ */
+const authStore = useAuthStore()
+
+/**
+ * Пользователь может редактировать только если у него edit или superuser.
+ */
+const canEdit = computed(() => authStore.isSuperuser || authStore.accessLevel === 'edit')
+
+/**
+ * Заголовок drawer.
+ */
+const drawerTitle = computed(() => {
+  return item.value?.taskIdentifier
+    ? `Карточка предложения — ${item.value.taskIdentifier}`
+    : 'Карточка предложения'
+})
+
+/**
+ * Состояния.
+ */
 const loading = ref(false)
-const saving = ref(false)
+const saveLoading = ref(false)
+const actionLoading = ref(false)
 const commentLoading = ref(false)
+
+/**
+ * Текущая карточка предложения.
+ */
 const item = ref<Requirement | null>(null)
-const newComment = ref('')
+
+/**
+ * Очереди для режима редактирования.
+ */
 const queues = ref<QueueItem[]>([])
 
+/**
+ * Текст нового комментария.
+ */
+const newCommentText = ref('')
+
+/**
+ * Локальная форма редактирования.
+ */
 const form = reactive<RequirementPayload>({
   shortName: '',
   initiator: '',
@@ -200,30 +353,17 @@ const form = reactive<RequirementPayload>({
   proposalText: '',
   problemComment: '',
   discussionSummary: '',
-  implementationQueue: '1 очередь',
+  implementationQueue: '',
+  contractName: '',
   noteText: '',
   tzPointText: '',
-  statusText: 'Новое',
-  systemType: '112',
-  contractName: '',
+  statusText: '',
+  systemType: '',
 })
 
-function fillForm(data: Requirement) {
-  form.shortName = data.shortName || ''
-  form.initiator = data.initiator || ''
-  form.responsiblePerson = data.responsiblePerson || ''
-  form.sectionName = data.sectionName || ''
-  form.proposalText = data.proposalText || ''
-  form.problemComment = data.problemComment || ''
-  form.discussionSummary = data.discussionSummary || ''
-  form.implementationQueue = data.implementationQueue || '1 очередь'
-  form.noteText = data.noteText || ''
-  form.tzPointText = data.tzPointText || ''
-  form.statusText = data.statusText || 'Новое'
-  form.systemType = data.systemType || '112'
-  form.contractName = data.contractName || ''
-}
-
+/**
+ * Загружаем справочник очередей.
+ */
 async function loadQueues() {
   try {
     queues.value = await fetchQueues()
@@ -232,12 +372,33 @@ async function loadQueues() {
   }
 }
 
-async function loadData() {
+/**
+ * Заполняем локальную форму из карточки.
+ */
+function fillForm(data: Requirement) {
+  form.shortName = data.shortName || ''
+  form.initiator = data.initiator || ''
+  form.responsiblePerson = data.responsiblePerson || ''
+  form.sectionName = data.sectionName || ''
+  form.proposalText = data.proposalText || ''
+  form.problemComment = data.problemComment || ''
+  form.discussionSummary = data.discussionSummary || ''
+  form.implementationQueue = data.implementationQueue || ''
+  form.contractName = data.contractName || ''
+  form.noteText = data.noteText || ''
+  form.tzPointText = data.tzPointText || ''
+  form.statusText = data.statusText || ''
+  form.systemType = data.systemType || ''
+}
+
+/**
+ * Загрузка карточки предложения.
+ */
+async function loadItem() {
   if (!props.requirementId) return
 
   try {
     loading.value = true
-    await loadQueues()
     const data = await fetchRequirementById(props.requirementId)
     item.value = data
     fillForm(data)
@@ -248,75 +409,80 @@ async function loadData() {
   }
 }
 
-watch(
-  () => [props.modelValue, props.requirementId],
-  async ([opened, id]) => {
-    if (opened && id) {
-      newComment.value = ''
-      await loadData()
-    }
-  },
-  { immediate: true },
-)
-
-async function openAddQueueDialog() {
-  try {
-    const { value } = await ElMessageBox.prompt('Введите номер новой очереди', 'Добавить очередь', {
-      confirmButtonText: 'Добавить',
-      cancelButtonText: 'Отмена',
-      inputPattern: /^[1-9]\d*$/,
-      inputErrorMessage: 'Введите положительное число',
-    })
-
-    const number = Number(value)
-    const created = await createQueue(number)
-    await loadQueues()
-    form.implementationQueue = created.name
-    ElMessage.success('Очередь добавлена')
-  } catch {
-    // cancel
-  }
-}
-
-async function querySearchTZ(queryString: string, cb: (arg: Array<{ value: string }>) => void) {
-  try {
-    const data = await fetchTZPointSuggestions(queryString)
-    cb(data.map((item) => ({ value: item })))
-  } catch {
-    cb([])
-  }
-}
-
-async function save() {
-  if (!props.requirementId) return
+/**
+ * Сохраняем изменения карточки.
+ */
+async function handleSave() {
+  if (!item.value) return
 
   try {
-    saving.value = true
-    await updateRequirement(props.requirementId, form)
-    await loadData()
+    saveLoading.value = true
+    await updateRequirement(item.value.id, { ...form })
     ElMessage.success('Изменения сохранены')
+    await loadItem()
     emit('updated')
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || 'Ошибка сохранения')
   } finally {
-    saving.value = false
+    saveLoading.value = false
   }
 }
 
-async function sendComment() {
-  if (!props.requirementId) return
-  if (!newComment.value.trim()) {
+/**
+ * Архивируем карточку.
+ */
+async function handleArchive() {
+  if (!item.value) return
+
+  try {
+    actionLoading.value = true
+    await archiveRequirement(item.value.id)
+    ElMessage.success('Запись отправлена в архив')
+    await loadItem()
+    emit('updated')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка архивирования')
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+/**
+ * Восстанавливаем карточку из архива.
+ */
+async function handleRestore() {
+  if (!item.value) return
+
+  try {
+    actionLoading.value = true
+    await restoreRequirement(item.value.id)
+    ElMessage.success('Запись восстановлена')
+    await loadItem()
+    emit('updated')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка восстановления')
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+/**
+ * Добавляем комментарий.
+ */
+async function handleAddComment() {
+  if (!item.value) return
+  if (!newCommentText.value.trim()) {
     ElMessage.warning('Введите комментарий')
     return
   }
 
   try {
     commentLoading.value = true
-    await addRequirementComment(props.requirementId, newComment.value)
-    newComment.value = ''
-    await loadData()
-    emit('updated')
+    await addRequirementComment(item.value.id, newCommentText.value.trim())
+    newCommentText.value = ''
     ElMessage.success('Комментарий добавлен')
+    await loadItem()
+    emit('updated')
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || 'Ошибка добавления комментария')
   } finally {
@@ -324,92 +490,159 @@ async function sendComment() {
   }
 }
 
-function formatDate(value: string) {
+/**
+ * Формат даты и времени.
+ */
+function formatDateTime(value: string) {
   if (!value) return ''
   return new Date(value).toLocaleString('ru-RU')
 }
 
-const baseStatuses = ['Новое', 'Учтено', 'Выполнено']
+/**
+ * При открытии drawer и смене id загружаем данные.
+ */
+watch(
+  () => [props.modelValue, props.requirementId],
+  async ([opened, id]) => {
+    if (!opened || !id) return
 
-function querySearchStatus(queryString: string, cb: (arg: Array<{ value: string }>) => void) {
-  const value = queryString.trim().toLowerCase()
-
-  if (!value) {
-    cb(baseStatuses.map((item) => ({ value: item })))
-    return
-  }
-
-  const results = baseStatuses
-    .filter((item) => item.toLowerCase().includes(value))
-    .map((item) => ({ value: item }))
-
-  cb(results)
-}
-
-async function querySearchContracts(queryString: string, cb: (arg: Array<{ value: string }>) => void) {
-  try {
-    const data = await searchContracts(queryString)
-    cb(data.map((item) => ({ value: item })))
-  } catch {
-    cb([])
-  }
-}
+    await loadQueues()
+    await loadItem()
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>
-.queue-add-col {
-  display: flex;
-  align-items: flex-end;
+.drawer-body {
+  display: grid;
+  gap: 16px;
 }
 
-.service-meta {
-  margin: 20px 0;
-  padding: 16px;
-  background: #f5f7fa;
-  border-radius: 10px;
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.meta-block {
+  display: grid;
+  gap: 6px;
+}
+
+.meta-line {
+  font-size: 14px;
+  color: #344054;
+}
+
+.meta-label {
+  font-weight: 700;
+}
+
+.top-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.details-form {
   display: grid;
   gap: 8px;
 }
 
-.drawer-actions {
-  margin-bottom: 24px;
+.readonly-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.comments-block {
-  margin-top: 24px;
+.readonly-card {
+  border: 1px solid #e7ecf3;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #fff;
+}
+
+.readonly-card.full {
+  grid-column: 1 / -1;
+}
+
+.readonly-label {
+  font-size: 12px;
+  color: #667085;
+  margin-bottom: 6px;
+}
+
+.readonly-value {
+  font-size: 14px;
+  line-height: 1.45;
+  color: #1f2937;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comments-title {
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .comments-list {
   display: grid;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 10px;
 }
 
 .comment-card {
-  border-radius: 12px;
+  border: 1px solid #e7ecf3;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #fff;
 }
 
-.comment-meta {
+.comment-header {
   display: flex;
-  gap: 8px;
-  align-items: center;
-  color: #606266;
-  font-size: 13px;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 8px;
-  flex-wrap: wrap;
+}
+
+.comment-author {
+  font-weight: 600;
+  color: #344054;
+}
+
+.comment-date {
+  color: #667085;
+  font-size: 13px;
 }
 
 .comment-text {
   white-space: pre-wrap;
+  word-break: break-word;
+  color: #1f2937;
 }
 
-.comment-actions {
-  margin-top: 12px;
+.comment-editor {
+  display: grid;
+  gap: 10px;
 }
 
-.queue-select-footer {
-  padding-top: 8px;
+.comment-editor-actions {
   display: flex;
-  justify-content: flex-start;
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  .top-bar {
+    flex-direction: column;
+  }
+
+  .readonly-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .readonly-card.full {
+    grid-column: auto;
+  }
 }
 </style>
