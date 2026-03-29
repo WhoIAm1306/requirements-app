@@ -132,6 +132,7 @@ func main() {
 		admin.GET("/users", userHandler.ListUsers)
 		admin.POST("/users", userHandler.CreateUser)
 		admin.PUT("/users/:id", userHandler.UpdateUser)
+		admin.DELETE("/requirements", requirementHandler.DeleteAll)
 	}
 
 	// Раздача собранного фронтенда, если он существует.

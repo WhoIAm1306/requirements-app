@@ -16,6 +16,15 @@
             <el-button v-if="authStore.isSuperuser" @click="router.push('/admin/users')">
               Пользователи
             </el-button>
+            <el-button
+              v-if="authStore.isSuperuser"
+              type="danger"
+              plain
+              :loading="deleteAllLoading"
+              @click="handleDeleteAllRequirements"
+            >
+              Удалить все предложения
+            </el-button>
             <el-button @click="router.push('/gk-directory')">Справочник ГК</el-button>
           </div>
           <el-dropdown trigger="click" placement="bottom-end" @command="handleUserMenuCommand">
@@ -387,6 +396,7 @@ import { ArrowDown, Close, Delete, FolderDelete, RefreshRight, View } from '@ele
 import { useAuthStore } from '@/stores/auth'
 import {
   archiveRequirement,
+  deleteAllRequirements,
   deleteRequirement,
   fetchRequirements,
   restoreRequirement,
@@ -426,6 +436,7 @@ const canEdit = computed(() => authStore.isSuperuser || authStore.accessLevel ==
  * Состояния страницы.
  */
 const loading = ref(false)
+const deleteAllLoading = ref(false)
 const createLoading = ref(false)
 const createDialogVisible = ref(false)
 const detailsVisible = ref(false)
@@ -722,6 +733,35 @@ async function handleDelete(row: Requirement) {
     await loadData()
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || 'Ошибка удаления')
+  }
+}
+
+async function handleDeleteAllRequirements() {
+  try {
+    await ElMessageBox.confirm(
+      'Будут удалены все предложения в базе (системы 112 и 101, в том числе из архива). Комментарии в карточках удаляются безвозвратно. Отменить операцию будет нельзя.',
+      'Удалить все предложения',
+      {
+        type: 'error',
+        confirmButtonText: 'Удалить все',
+        cancelButtonText: 'Отмена',
+        confirmButtonClass: 'el-button--danger',
+      },
+    )
+  } catch {
+    return
+  }
+  try {
+    deleteAllLoading.value = true
+    const res = await deleteAllRequirements()
+    ElMessage.success(res.message || `Удалено записей: ${res.deleted}`)
+    detailsVisible.value = false
+    selectedRequirementId.value = null
+    await loadData()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка массового удаления')
+  } finally {
+    deleteAllLoading.value = false
   }
 }
 

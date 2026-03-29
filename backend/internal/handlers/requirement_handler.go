@@ -1024,6 +1024,37 @@ func (h *RequirementHandler) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Предложение удалено"})
 }
 
+// DELETE /api/admin/requirements — удалить все предложения (только суперпользователь; маршрут в группе admin).
+// Комментарии удаляются физически, предложения — мягкое удаление (как у одиночного DELETE).
+func (h *RequirementHandler) DeleteAll(c *gin.Context) {
+	var n int64
+	if err := h.db.Model(&models.Requirement{}).Count(&n).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка подсчёта записей"})
+		return
+	}
+
+	if n == 0 {
+		c.JSON(http.StatusOK, gin.H{"deleted": int64(0), "message": "Нет предложений для удаления"})
+		return
+	}
+
+	err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.Comment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.Requirement{}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка массового удаления"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"deleted": n, "message": "Все предложения удалены"})
+}
+
 // GET /api/requirements/:id/gk-link — сведения о привязке к функции справочника ГК.
 func (h *RequirementHandler) GetGKLink(c *gin.Context) {
 	var reqItem models.Requirement

@@ -71,6 +71,12 @@ export async function deleteRequirement(id: number) {
   await apiClient.delete(`/requirements/${id}`)
 }
 
+/** Удалить все предложения (только суперпользователь). */
+export async function deleteAllRequirements() {
+  const { data } = await apiClient.delete<{ deleted: number; message: string }>('/admin/requirements')
+  return data
+}
+
 export interface RequirementGKLinkInfo {
   hasFunction: boolean
   contractId: number
