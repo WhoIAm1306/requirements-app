@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xuri/excelize/v2"
@@ -57,6 +58,8 @@ type CreateRequirementRequest struct {
 	SystemType          string `json:"systemType"`
 	ContractName        string `json:"contractName"`
 	ContractTZFunctionID *uint  `json:"contractTZFunctionId"`
+	// TaskIdentifier — необязательно; если пусто, сгенерируется автоматически.
+	TaskIdentifier string `json:"taskIdentifier,omitempty"`
 }
 
 type UpdateRequirementRequest struct {
@@ -75,6 +78,8 @@ type UpdateRequirementRequest struct {
 	SystemType          string `json:"systemType"`
 	ContractName        string `json:"contractName"`
 	ContractTZFunctionID *uint  `json:"contractTZFunctionId"`
+	// TaskIdentifier — если передан, обновляет идентификатор (уникальность проверяется).
+	TaskIdentifier *string `json:"taskIdentifier,omitempty"`
 }
 
 type AddCommentRequest struct {
@@ -103,45 +108,110 @@ func extractQueueNumber(value string) (int, error) {
 	return num, nil
 }
 
-func (h *RequirementHandler) generateTaskIdentifier(queueName string, excludeID uint) (string, error) {
+func slugifyGKShortNameForTaskID(s string) string {
+	s = strings.TrimSpace(s)
+	var b strings.Builder
+	for _, r := range s {
+		if r == ' ' || r == '.' || r == '_' || r == '\t' || r == '\n' {
+			continue
+		}
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	out := b.String()
+	runes := []rune(out)
+	if len(runes) > 40 {
+		out = string(runes[:40])
+	}
+	return out
+}
+
+func (h *RequirementHandler) ensureTaskIdentifierUnique(taskID string, excludeID uint) error {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return fmt.Errorf("пустой идентификатор")
+	}
+	q := h.db.Model(&models.Requirement{}).Where("task_identifier = ?", taskID)
+	if excludeID > 0 {
+		q = q.Where("id <> ?", excludeID)
+	}
+	var n int64
+	if err := q.Count(&n).Error; err != nil {
+		return err
+	}
+	if n > 0 {
+		return fmt.Errorf("идентификатор уже занят")
+	}
+	return nil
+}
+
+// generateTaskIdentifier формирует ПОВ… с учётом ГК или в старом формате ПОВ{очередь}.{n}.
+func (h *RequirementHandler) generateTaskIdentifier(queueName, contractName string, excludeID uint) (string, error) {
 	queueNumber, err := extractQueueNumber(queueName)
 	if err != nil {
 		return "", err
+	}
+
+	contractName = strings.TrimSpace(contractName)
+	var slug string
+	useExtended := false
+	if contractName != "" {
+		var co models.ContractDictionary
+		if err := h.db.Where("LOWER(name) = LOWER(?)", contractName).First(&co).Error; err == nil {
+			if co.UseShortNameInTaskID {
+				slug = slugifyGKShortNameForTaskID(co.ShortName)
+				if slug != "" {
+					useExtended = true
+				}
+			}
+		}
 	}
 
 	var items []models.Requirement
 	query := h.db.
 		Where("implementation_queue = ?", queueName).
 		Order("id asc")
-
 	if excludeID > 0 {
 		query = query.Where("id <> ?", excludeID)
 	}
-
 	if err := query.Find(&items).Error; err != nil {
 		return "", err
 	}
 
 	maxOrder := 0
-	re := regexp.MustCompile(fmt.Sprintf(`^ПОВ%d\.(\d+)$`, queueNumber))
+	var re *regexp.Regexp
+	if useExtended {
+		re = regexp.MustCompile(fmt.Sprintf(`^ПОВ\.%s\.%d\.(\d+)$`, regexp.QuoteMeta(slug), queueNumber))
+	} else {
+		re = regexp.MustCompile(fmt.Sprintf(`^ПОВ%d\.(\d+)$`, queueNumber))
+	}
 
 	for _, item := range items {
 		matches := re.FindStringSubmatch(strings.TrimSpace(item.TaskIdentifier))
 		if len(matches) != 2 {
 			continue
 		}
-
 		n, err := strconv.Atoi(matches[1])
 		if err != nil {
 			continue
 		}
-
 		if n > maxOrder {
 			maxOrder = n
 		}
 	}
 
+	if useExtended {
+		return fmt.Sprintf("ПОВ.%s.%d.%d", slug, queueNumber, maxOrder+1), nil
+	}
 	return fmt.Sprintf("ПОВ%d.%d", queueNumber, maxOrder+1), nil
+}
+
+// requirementListRow — ответ списка с полями ГК для подписи в таблице.
+type requirementListRow struct {
+	models.Requirement
+	ContractShortName            string `json:"contractShortName,omitempty"`
+	ContractUseShortNameInTaskID bool `json:"contractUseShortNameInTaskId,omitempty"`
 }
 
 func (h *RequirementHandler) List(c *gin.Context) {
@@ -183,7 +253,42 @@ func (h *RequirementHandler) List(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, items)
+	lowerKeys := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, it := range items {
+		k := strings.ToLower(strings.TrimSpace(it.ContractName))
+		if k == "" {
+			continue
+		}
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		lowerKeys = append(lowerKeys, k)
+	}
+
+	byLower := map[string]models.ContractDictionary{}
+	if len(lowerKeys) > 0 {
+		var contracts []models.ContractDictionary
+		if err := h.db.Where("LOWER(TRIM(name)) IN ?", lowerKeys).Find(&contracts).Error; err == nil {
+			for _, co := range contracts {
+				byLower[strings.ToLower(strings.TrimSpace(co.Name))] = co
+			}
+		}
+	}
+
+	out := make([]requirementListRow, 0, len(items))
+	for _, it := range items {
+		row := requirementListRow{Requirement: it}
+		k := strings.ToLower(strings.TrimSpace(it.ContractName))
+		if co, ok := byLower[k]; ok {
+			row.ContractShortName = co.ShortName
+			row.ContractUseShortNameInTaskID = co.UseShortNameInTaskID
+		}
+		out = append(out, row)
+	}
+
+	c.JSON(http.StatusOK, out)
 }
 
 func (h *RequirementHandler) GetByID(c *gin.Context) {
@@ -255,10 +360,20 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		req.StatusText = "В обработку"
 	}
 
-	taskIdentifier, err := h.generateTaskIdentifier(strings.TrimSpace(req.ImplementationQueue), 0)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Ошибка генерации идентификатора задачи"})
-		return
+	var taskIdentifier string
+	if tid := strings.TrimSpace(req.TaskIdentifier); tid != "" {
+		if err := h.ensureTaskIdentifierUnique(tid, 0); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Идентификатор задачи уже используется или некорректен"})
+			return
+		}
+		taskIdentifier = tid
+	} else {
+		var err error
+		taskIdentifier, err = h.generateTaskIdentifier(strings.TrimSpace(req.ImplementationQueue), contractName, 0)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Ошибка генерации идентификатора задачи"})
+			return
+		}
 	}
 
 	item := models.Requirement{
@@ -333,14 +448,41 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 
 	oldQueue := strings.TrimSpace(item.ImplementationQueue)
 	newQueue := strings.TrimSpace(req.ImplementationQueue)
+	queueChanged := oldQueue != newQueue
+	oldTID := strings.TrimSpace(item.TaskIdentifier)
 
-	if oldQueue != newQueue {
-		taskIdentifier, err := h.generateTaskIdentifier(newQueue, item.ID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"message": "Ошибка генерации идентификатора задачи"})
+	explicitTID := ""
+	if req.TaskIdentifier != nil {
+		explicitTID = strings.TrimSpace(*req.TaskIdentifier)
+	}
+
+	if queueChanged {
+		if explicitTID != "" && explicitTID != oldTID {
+			if err := h.ensureTaskIdentifierUnique(explicitTID, item.ID); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"message": "Такой идентификатор уже используется"})
+				return
+			}
+			item.TaskIdentifier = explicitTID
+		} else {
+			taskIdentifier, err := h.generateTaskIdentifier(newQueue, contractName, item.ID)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"message": "Ошибка генерации идентификатора задачи"})
+				return
+			}
+			item.TaskIdentifier = taskIdentifier
+		}
+	} else if req.TaskIdentifier != nil {
+		if explicitTID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Идентификатор задачи не может быть пустым"})
 			return
 		}
-		item.TaskIdentifier = taskIdentifier
+		if explicitTID != oldTID {
+			if err := h.ensureTaskIdentifierUnique(explicitTID, item.ID); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"message": "Такой идентификатор уже используется"})
+				return
+			}
+		}
+		item.TaskIdentifier = explicitTID
 	}
 
 	item.ShortName = strings.TrimSpace(req.ShortName)
@@ -600,13 +742,6 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 			continue
 		}
 
-		taskIdentifier, err := h.generateTaskIdentifier(normalizedQueue, 0)
-		if err != nil {
-			result.Failed++
-			result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: ошибка генерации идентификатора", lineNumber))
-			continue
-		}
-
 		responsiblePerson := getCellByHeader(row, headerMap,
 			"Ответственный со стороны предложения",
 			"Ответственный за предложение",
@@ -630,6 +765,25 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 			result.Failed++
 			result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: ошибка сохранения ГК", lineNumber))
 			continue
+		}
+
+		explicitTID := getCellByHeader(row, headerMap, "Идентификатор задачи", "Идентификатор")
+		var taskIdentifier string
+		if strings.TrimSpace(explicitTID) != "" {
+			taskIdentifier = strings.TrimSpace(explicitTID)
+			if err := h.ensureTaskIdentifierUnique(taskIdentifier, 0); err != nil {
+				result.Failed++
+				result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: идентификатор уже занят или некорректен", lineNumber))
+				continue
+			}
+		} else {
+			var err error
+			taskIdentifier, err = h.generateTaskIdentifier(normalizedQueue, contractName, 0)
+			if err != nil {
+				result.Failed++
+				result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: ошибка генерации идентификатора", lineNumber))
+				continue
+			}
 		}
 
 		item := models.Requirement{

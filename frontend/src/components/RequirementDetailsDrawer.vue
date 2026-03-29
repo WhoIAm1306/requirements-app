@@ -53,6 +53,12 @@
         <template v-if="canEdit">
           <el-form label-position="top" class="details-form">
             <el-row :gutter="16">
+              <el-col :span="24">
+                <el-form-item label="Идентификатор задачи">
+                  <el-input v-model="form.taskIdentifier" placeholder="Уникальный идентификатор" />
+                </el-form-item>
+              </el-col>
+
               <el-col :span="12">
                 <el-form-item label="Краткое наименование предложения">
                   <el-input v-model="form.shortName" />
@@ -436,6 +442,7 @@ const newCommentText = ref('')
  * Локальная форма редактирования.
  */
 const form = reactive<RequirementPayload>({
+  taskIdentifier: '',
   shortName: '',
   initiator: '',
   responsiblePerson: '',
@@ -477,6 +484,7 @@ async function loadQueues() {
  * Заполняем локальную форму из карточки.
  */
 function fillForm(data: Requirement) {
+  form.taskIdentifier = data.taskIdentifier || ''
   form.shortName = data.shortName || ''
   form.initiator = data.initiator || ''
   form.responsiblePerson = data.responsiblePerson || ''

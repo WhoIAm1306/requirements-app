@@ -10,6 +10,14 @@
         <el-input v-model="form.name" />
       </el-form-item>
 
+      <el-form-item label="Краткое наименование">
+        <el-input v-model="form.shortName" placeholder="Необязательно" />
+      </el-form-item>
+
+      <el-form-item label="Учитывать краткое наименование в идентификационном номере">
+        <el-switch v-model="form.useShortNameInTaskId" />
+      </el-form-item>
+
       <el-form-item label="Описание / главная информация">
         <el-input v-model="form.description" type="textarea" :rows="4" />
       </el-form-item>
@@ -33,7 +41,10 @@ import type { CreateGKContractPayload, GKContractDetails, UpdateGKContractPayloa
 const props = defineProps<{
   modelValue: boolean
   mode: 'create' | 'edit'
-  initialContract: Pick<GKContractDetails, 'id' | 'name' | 'description'> | null
+  initialContract: Pick<
+    GKContractDetails,
+    'id' | 'name' | 'description' | 'shortName' | 'useShortNameInTaskId'
+  > | null
 }>()
 
 const emit = defineEmits<{
@@ -45,11 +56,15 @@ const loading = defineModel<boolean>('loading', { default: false })
 
 const emptyForm = (): CreateGKContractPayload => ({
   name: '',
+  shortName: '',
+  useShortNameInTaskId: false,
   description: '',
 })
 
 const form = reactive<CreateGKContractPayload & UpdateGKContractPayload>({
   name: '',
+  shortName: '',
+  useShortNameInTaskId: false,
   description: '',
 })
 
@@ -60,6 +75,8 @@ watch(
 
     if (props.mode === 'edit' && props.initialContract) {
       form.name = props.initialContract.name || ''
+      form.shortName = props.initialContract.shortName || ''
+      form.useShortNameInTaskId = Boolean(props.initialContract.useShortNameInTaskId)
       form.description = props.initialContract.description || ''
       return
     }
@@ -75,6 +92,8 @@ async function submit() {
 
     const payload = {
       name: form.name.trim(),
+      shortName: form.shortName?.trim() || '',
+      useShortNameInTaskId: Boolean(form.useShortNameInTaskId),
       description: form.description?.trim() || '',
     }
 

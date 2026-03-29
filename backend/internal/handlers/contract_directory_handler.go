@@ -27,13 +27,17 @@ func NewContractDirectoryHandler(db *gorm.DB) *ContractDirectoryHandler {
 }
 
 type CreateContractRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name                 string `json:"name"`
+	ShortName            string `json:"shortName"`
+	UseShortNameInTaskID bool   `json:"useShortNameInTaskId"`
+	Description          string `json:"description"`
 }
 
 type UpdateContractRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name                 string `json:"name"`
+	ShortName            string `json:"shortName"`
+	UseShortNameInTaskID bool   `json:"useShortNameInTaskId"`
+	Description          string `json:"description"`
 }
 
 type ContractStageRequest struct {
@@ -188,21 +192,25 @@ func (h *ContractDirectoryHandler) GetContractDetails(c *gin.Context) {
 
 	// Возвращаем timestamp в виде ISO-строки.
 	type contractDTO struct {
-		ID          uint                    `json:"id"`
-		Name        string                  `json:"name"`
-		Description string                  `json:"description"`
-		IsActive    bool                    `json:"isActive"`
-		CreatedAt   string                  `json:"createdAt"`
-		Stages      []models.ContractStage `json:"stages"`
+		ID                   uint                   `json:"id"`
+		Name                 string                 `json:"name"`
+		ShortName            string                 `json:"shortName"`
+		UseShortNameInTaskID bool                   `json:"useShortNameInTaskId"`
+		Description          string                 `json:"description"`
+		IsActive             bool                   `json:"isActive"`
+		CreatedAt            string                 `json:"createdAt"`
+		Stages               []models.ContractStage `json:"stages"`
 	}
 
 	c.JSON(http.StatusOK, contractDTO{
-		ID:          contract.ID,
-		Name:        contract.Name,
-		Description: contract.Description,
-		IsActive:    contract.IsActive,
-		CreatedAt:   contract.CreatedAt.Format("2006-01-02 15:04:05"),
-		Stages:      stages,
+		ID:                   contract.ID,
+		Name:                 contract.Name,
+		ShortName:            contract.ShortName,
+		UseShortNameInTaskID: contract.UseShortNameInTaskID,
+		Description:          contract.Description,
+		IsActive:             contract.IsActive,
+		CreatedAt:            contract.CreatedAt.Format("2006-01-02 15:04:05"),
+		Stages:               stages,
 	})
 }
 
@@ -226,23 +234,25 @@ func (h *ContractDirectoryHandler) CreateContract(c *gin.Context) {
 		return
 	}
 
-	// If exists - treat as idempotent upsert of description.
+	// If exists - обновляем описание и поля краткого наименования.
 	if existing != nil {
-		if strings.TrimSpace(req.Description) != "" {
-			existing.Description = strings.TrimSpace(req.Description)
-			if err := h.db.Save(existing).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка обновления описания"})
-				return
-			}
+		existing.Description = strings.TrimSpace(req.Description)
+		existing.ShortName = strings.TrimSpace(req.ShortName)
+		existing.UseShortNameInTaskID = req.UseShortNameInTaskID
+		if err := h.db.Save(existing).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка обновления ГК"})
+			return
 		}
 		c.JSON(http.StatusOK, existing)
 		return
 	}
 
 	item := models.ContractDictionary{
-		Name:        req.Name,
-		Description: strings.TrimSpace(req.Description),
-		IsActive:    true,
+		Name:                 req.Name,
+		ShortName:            strings.TrimSpace(req.ShortName),
+		UseShortNameInTaskID: req.UseShortNameInTaskID,
+		Description:          strings.TrimSpace(req.Description),
+		IsActive:             true,
 	}
 	if err := h.db.Create(&item).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка создания ГК"})
@@ -272,6 +282,8 @@ func (h *ContractDirectoryHandler) UpdateContract(c *gin.Context) {
 	}
 
 	contract.Name = req.Name
+	contract.ShortName = strings.TrimSpace(req.ShortName)
+	contract.UseShortNameInTaskID = req.UseShortNameInTaskID
 	contract.Description = strings.TrimSpace(req.Description)
 
 	if err := h.db.Save(&contract).Error; err != nil {

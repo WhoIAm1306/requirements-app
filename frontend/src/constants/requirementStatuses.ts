@@ -2,6 +2,7 @@
 export const STANDARD_REQUIREMENT_STATUSES = [
   'В обработку',
   'Новое',
+  'Требуется обсуждение',
   'Учтено',
   'Выполнено',
 ] as const

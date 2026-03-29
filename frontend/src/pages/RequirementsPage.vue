@@ -236,12 +236,19 @@
                 </template>
               </el-table-column>
 
-              <el-table-column
-                prop="contractName"
-                label="ГК"
-                width="230"
-                show-overflow-tooltip
-              />
+              <el-table-column label="ГК" width="260" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span class="gk-cell">
+                    {{ row.contractName || '—' }}
+                    <span
+                      v-if="row.contractUseShortNameInTaskId && (row.contractShortName || '').trim()"
+                      class="gk-short-hint"
+                    >
+                      ({{ row.contractShortName }})
+                    </span>
+                  </span>
+                </template>
+              </el-table-column>
 
               <el-table-column label="п.п. ТЗ" width="220" class-name="tz-col">
                 <template #default="{ row }">
@@ -1233,6 +1240,17 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   padding: 0 8px;
   box-sizing: border-box;
+}
+
+.gk-cell {
+  display: inline;
+}
+
+.gk-short-hint {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  font-weight: 500;
 }
 
 @media (max-width: 1365px) {

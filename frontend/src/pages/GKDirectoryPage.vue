@@ -33,7 +33,13 @@
           :height="520"
           @row-click="handleRowClick"
         >
-          <el-table-column prop="name" label="ГК" min-width="280" show-overflow-tooltip />
+          <el-table-column prop="name" label="ГК" min-width="240" show-overflow-tooltip />
+          <el-table-column
+            prop="shortName"
+            label="Краткое наименование"
+            min-width="160"
+            show-overflow-tooltip
+          />
           <el-table-column label="Описание" min-width="340">
             <template #default="{ row }">
               <span class="cell-clamp" :title="row.description || ''">
@@ -100,6 +106,15 @@
                 <el-form-item label="Наименование ГК">
                   <el-input v-model="contractForm.name" placeholder="Введите наименование" />
                 </el-form-item>
+                <el-form-item label="Краткое наименование">
+                  <el-input
+                    v-model="contractForm.shortName"
+                    placeholder="Кратко (для идентификатора и подписи в списке предложений)"
+                  />
+                </el-form-item>
+                <el-form-item label="Учитывать краткое наименование в идентификационном номере">
+                  <el-switch v-model="contractForm.useShortNameInTaskId" />
+                </el-form-item>
                 <el-form-item label="Описание / главная информация">
                   <el-input
                     v-model="contractForm.description"
@@ -114,6 +129,16 @@
                 <div class="readonly-card">
                   <div class="readonly-label">Наименование ГК</div>
                   <div class="readonly-value">{{ contractDetails.name || '—' }}</div>
+                </div>
+                <div class="readonly-card">
+                  <div class="readonly-label">Краткое наименование</div>
+                  <div class="readonly-value">{{ contractDetails.shortName || '—' }}</div>
+                </div>
+                <div class="readonly-card">
+                  <div class="readonly-label">Краткое в идентификаторе</div>
+                  <div class="readonly-value">
+                    {{ contractDetails.useShortNameInTaskId ? 'Да' : 'Нет' }}
+                  </div>
                 </div>
                 <div class="readonly-card full">
                   <div class="readonly-label">Описание</div>
@@ -411,8 +436,15 @@ const drawerLoading = ref(false)
 const selectedContractId = ref<number | null>(null)
 const contractDetails = ref<GKContractDetails | null>(null)
 
-const contractForm = reactive<{ name: string; description: string }>({
+const contractForm = reactive<{
+  name: string
+  shortName: string
+  useShortNameInTaskId: boolean
+  description: string
+}>({
   name: '',
+  shortName: '',
+  useShortNameInTaskId: false,
   description: '',
 })
 
@@ -467,6 +499,8 @@ function shortText(value: string, maxLength = 80) {
 
 function fillContractForm(details: GKContractDetails) {
   contractForm.name = details.name || ''
+  contractForm.shortName = details.shortName || ''
+  contractForm.useShortNameInTaskId = Boolean(details.useShortNameInTaskId)
   contractForm.description = details.description || ''
 }
 
@@ -534,6 +568,8 @@ async function handleSaveContract() {
     saveLoading.value = true
     await updateGKContract(selectedContractId.value, {
       name: contractForm.name,
+      shortName: contractForm.shortName?.trim() || '',
+      useShortNameInTaskId: contractForm.useShortNameInTaskId,
       description: contractForm.description,
     })
     ElMessage.success('ГК сохранён')

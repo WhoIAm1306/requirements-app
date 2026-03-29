@@ -9,7 +9,12 @@
       <el-row :gutter="16">
         <el-col :span="12">
           <el-form-item label="Идентификатор задачи">
-            <el-input value="Будет присвоен автоматически" disabled />
+            <el-input
+              v-model="form.taskIdentifier"
+              clearable
+              placeholder="Пусто — сгенерируется автоматически"
+            />
+            <div class="field-hint">Формат зависит от очереди и настроек выбранной ГК.</div>
           </el-form-item>
         </el-col>
 
@@ -218,6 +223,7 @@ const selectedStageNumber = ref<number | null>(null)
 const selectedFunctionId = ref<number | null>(null)
 
 const emptyForm = (): RequirementPayload => ({
+  taskIdentifier: '',
   shortName: '',
   initiator: initiatorForSystemType('112'),
   responsiblePerson: authStore.fullName,
@@ -358,7 +364,11 @@ function handleFunctionSelected(functionId: number | null) {
 async function submit() {
   try {
     loading.value = true
-    await createRequirement(form)
+    const payload: RequirementPayload = { ...form }
+    if (!(payload.taskIdentifier || '').trim()) {
+      delete payload.taskIdentifier
+    }
+    await createRequirement(payload)
     ElMessage.success('Предложение создано')
     emit('saved')
     emit('update:modelValue', false)
@@ -392,6 +402,13 @@ function onSystemTypeChange() {
   font-size: 13px;
   color: #5c6b7f;
   line-height: 1.4;
+}
+
+.field-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.35;
 }
 
 </style>

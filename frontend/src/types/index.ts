@@ -76,6 +76,8 @@ export interface QueueItem {
 export interface ContractItem {
   id: number
   name: string
+  shortName?: string
+  useShortNameInTaskId?: boolean
   description?: string
   isActive: boolean
   createdAt: string
@@ -109,6 +111,8 @@ export interface GKFunction {
 export interface GKContractDetails {
   id: number
   name: string
+  shortName?: string
+  useShortNameInTaskId?: boolean
   description: string
   isActive: boolean
   createdAt: string
@@ -117,11 +121,15 @@ export interface GKContractDetails {
 
 export interface CreateGKContractPayload {
   name: string
+  shortName?: string
+  useShortNameInTaskId?: boolean
   description: string
 }
 
 export interface UpdateGKContractPayload {
   name: string
+  shortName?: string
+  useShortNameInTaskId?: boolean
   description: string
 }
 
@@ -160,6 +168,9 @@ export interface CommentItem {
 export interface Requirement {
   id: number
   taskIdentifier: string
+  /** Подпись к ГК в списке (из справочника). */
+  contractShortName?: string
+  contractUseShortNameInTaskId?: boolean
   shortName: string
   initiator: string
   responsiblePerson: string
@@ -190,6 +201,7 @@ export interface Requirement {
 
 // Payload для создания/обновления предложения.
 export interface RequirementPayload {
+  taskIdentifier?: string
   shortName: string
   initiator: string
   responsiblePerson: string

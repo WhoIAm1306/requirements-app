@@ -9,7 +9,7 @@ import (
 // Requirement — основная сущность предложения.
 type Requirement struct {
 	ID                  uint       `gorm:"primaryKey" json:"id"`
-	TaskIdentifier      string     `gorm:"size:100;index" json:"taskIdentifier"`
+	TaskIdentifier      string     `gorm:"size:255;index" json:"taskIdentifier"`
 	ShortName           string     `gorm:"type:text" json:"shortName"`
 	Initiator           string     `gorm:"size:255" json:"initiator"`
 	ResponsiblePerson   string     `gorm:"size:255" json:"responsiblePerson"`
@@ -82,9 +82,13 @@ type QueueDictionary struct {
 type ContractDictionary struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	Name      string    `gorm:"size:255;uniqueIndex" json:"name"`
-	Description string   `gorm:"type:text" json:"description"`
-	IsActive  bool      `gorm:"default:true" json:"isActive"`
-	CreatedAt time.Time `json:"createdAt"`
+	// ShortName — краткое наименование для отображения и (опционально) для идентификатора ПОВ.
+	ShortName string `gorm:"size:120" json:"shortName"`
+	// UseShortNameInTaskID — учитывать краткое наименование в идентификаторе: ПОВ.<краткое>.<очередь>.<порядок>.
+	UseShortNameInTaskID bool `gorm:"default:false" json:"useShortNameInTaskId"`
+	Description          string `gorm:"type:text" json:"description"`
+	IsActive             bool   `gorm:"default:true" json:"isActive"`
+	CreatedAt            time.Time `json:"createdAt"`
 }
 
 // ContractStage — этапы внутри ГК.

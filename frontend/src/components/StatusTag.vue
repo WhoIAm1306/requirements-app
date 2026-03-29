@@ -16,6 +16,7 @@ const tagType = computed(() => {
 
   if (value === 'в обработку') return 'warning'
   if (value === 'новое') return 'info'
+  if (value === 'требуется обсуждение') return 'danger'
   if (value === 'учтено') return 'success'
   if (value === 'выполнено') return 'primary'
 
