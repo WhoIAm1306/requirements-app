@@ -4,7 +4,7 @@
 
     :model-value="modelValue"
 
-    title="Сведения по п.п. ТЗ"
+    title="Сведения по функции НМЦК и ТЗ"
 
     width="560px"
 

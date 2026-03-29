@@ -170,32 +170,30 @@
               <el-col :span="24">
                 <el-divider />
 
+                <el-form-item label="Этап">
+                  <el-select
+                    v-model="selectedStageNumber"
+                    placeholder="Сначала выберите ГК"
+                    style="width: 100%"
+                    :disabled="!selectedContractId"
+                    filterable
+                    @change="handleStageChange"
+                  >
+                    <el-option
+                      v-for="stage in stages"
+                      :key="stage.id"
+                      :label="stage.stageName || `Этап ${stage.stageNumber}`"
+                      :value="stage.stageNumber"
+                    />
+                    <template #empty>
+                      <span class="select-empty">К выбранной ГК не добавлены этапы (справочник ГК).</span>
+                    </template>
+                  </el-select>
+                </el-form-item>
+
                 <el-row :gutter="16">
                   <el-col :span="12">
-                    <el-form-item label="Этап">
-                      <el-select
-                        v-model="selectedStageNumber"
-                        placeholder="Сначала выберите ГК"
-                        style="width: 100%"
-                        :disabled="!selectedContractId"
-                        filterable
-                        @change="handleStageChange"
-                      >
-                        <el-option
-                          v-for="stage in stages"
-                          :key="stage.id"
-                          :label="stage.stageName || `Этап ${stage.stageNumber}`"
-                          :value="stage.stageNumber"
-                        />
-                        <template #empty>
-                          <span class="select-empty">К выбранной ГК не добавлены этапы (справочник ГК).</span>
-                        </template>
-                      </el-select>
-                    </el-form-item>
-                  </el-col>
-
-                  <el-col :span="12">
-                    <el-form-item label="п.п. ТЗ">
+                    <el-form-item label="п.п. НМЦК — функция">
                       <el-select
                         v-model="selectedFunctionId"
                         placeholder="Сначала выберите этап"
@@ -206,22 +204,32 @@
                         @change="handleFunctionSelected"
                       >
                         <el-option
-                          v-for="fn in functions"
+                          v-for="fn in sortedFunctions"
                           :key="fn.id"
-                          :label="`${fn.tzSectionNumber} — ${fn.functionName}`"
+                          :label="nmckFunctionOptionLabel(fn)"
                           :value="fn.id"
                         />
                         <template #empty>
-                          <span class="select-empty">Для выбранного этапа нет функций ТЗ в справочнике.</span>
+                          <span class="select-empty">Для выбранного этапа нет функций в справочнике ГК.</span>
                         </template>
                       </el-select>
                     </el-form-item>
                   </el-col>
-                </el-row>
 
-                <el-form-item label="п.п. НМЦК">
-                  <el-input v-model="form.nmckPointText" type="textarea" :rows="2" placeholder="Необязательно" />
-                </el-form-item>
+                  <el-col :span="12">
+                    <el-form-item label="п.п. ТЗ">
+                      <el-input
+                        :model-value="form.tzPointText"
+                        type="textarea"
+                        :rows="2"
+                        readonly
+                        disabled
+                        placeholder="Подставится после выбора функции НМЦК"
+                        class="tz-autofill-input"
+                      />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
               </el-col>
 
               <el-col :span="12">
@@ -294,14 +302,19 @@
               <div class="readonly-value">{{ item.discussionSummary || '—' }}</div>
             </div>
 
-            <div class="readonly-card">
-              <div class="readonly-label">п.п. ТЗ</div>
-              <div class="readonly-value">{{ item.tzPointText || '—' }}</div>
-            </div>
-
-            <div class="readonly-card">
-              <div class="readonly-label">п.п. НМЦК</div>
-              <div class="readonly-value">{{ item.nmckPointText || '—' }}</div>
+            <div class="readonly-card full">
+              <div class="readonly-label">Функция НМЦК, ТЗ</div>
+              <div class="readonly-value readonly-nmck-tz">
+                <template
+                  v-if="(item.nmckPointText || '').trim() || (item.tzPointText || '').trim()"
+                >
+                  <div v-if="(item.nmckPointText || '').trim()" class="readonly-subline">
+                    НМЦК: {{ item.nmckPointText }}
+                  </div>
+                  <div v-if="(item.tzPointText || '').trim()">ТЗ: {{ item.tzPointText }}</div>
+                </template>
+                <template v-else>—</template>
+              </div>
             </div>
 
             <div class="readonly-card">
@@ -468,6 +481,23 @@ const contractSelectOptions = computed(() => {
   if (exists) return list
   return [{ id: -1, name: cur }, ...list]
 })
+
+const sortedFunctions = computed(() => {
+  return [...functions.value].sort((a, b) => {
+    const cmp = (a.nmckFunctionNumber || '').localeCompare(b.nmckFunctionNumber || '', undefined, {
+      numeric: true,
+    })
+    if (cmp !== 0) return cmp
+    return (a.functionName || '').localeCompare(b.functionName || '', undefined, { sensitivity: 'base' })
+  })
+})
+
+function nmckFunctionOptionLabel(fn: GKFunction) {
+  const n = (fn.nmckFunctionNumber || '').trim()
+  const name = (fn.functionName || '').trim()
+  if (n && name) return `${n} — ${name}`
+  return name || n || '—'
+}
 
 /**
  * Загружаем справочник очередей.
@@ -793,6 +823,15 @@ watch(
   color: #1f2937;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.readonly-nmck-tz .readonly-subline {
+  margin-bottom: 4px;
+}
+
+:deep(.tz-autofill-input.is-disabled .el-textarea__inner) {
+  color: var(--el-text-color-regular);
+  -webkit-text-fill-color: var(--el-text-color-regular);
 }
 
 .comments-title {

@@ -259,12 +259,13 @@
                 </template>
               </el-table-column>
 
-              <el-table-column label="п.п. ТЗ" width="220" class-name="tz-col">
+              <el-table-column label="Функция НМЦК, ТЗ" width="260" class-name="tz-col">
                 <template #default="{ row }">
                   <button
                     type="button"
                     class="tz-cell-link"
                     :disabled="!tzCellLabel(row)"
+                    :title="tzCellLabel(row) || undefined"
                     @click.stop="openTzInfo(row)"
                   >
                     {{ tzCellLabel(row) || '—' }}
@@ -472,7 +473,7 @@ const floatingScrollbarRef = ref<HTMLElement | null>(null)
  * Ширина таблицы = сумма ширин колонок.
  */
 /** Сумма фиксированных ширин колонок (table-layout: fixed). */
-const tableWidth = 2710
+const tableWidth = 2750
 
 const filterNoFunction = ref(false)
 
@@ -696,11 +697,10 @@ function handleImportMenuCommand(cmd: string) {
 }
 
 function tzCellLabel(row: Requirement) {
-  const t = (row.tzPointText || '').trim()
-  if (t) return t
   const n = (row.nmckPointText || '').trim()
-  if (n) return `НМЦК: ${n}`
-  return ''
+  const t = (row.tzPointText || '').trim()
+  if (n && t) return `${n} · ${t}`
+  return n || t || ''
 }
 
 function openTzInfo(row: Requirement) {

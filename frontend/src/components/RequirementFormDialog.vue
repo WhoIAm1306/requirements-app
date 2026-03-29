@@ -146,7 +146,7 @@
 
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item label="п.п. ТЗ">
+          <el-form-item label="п.п. НМЦК — функция">
             <el-select
               v-model="selectedFunctionId"
               placeholder="Сначала выберите этап"
@@ -157,20 +157,28 @@
               @change="handleFunctionSelected"
             >
               <el-option
-                v-for="fn in functions"
+                v-for="fn in sortedFunctions"
                 :key="fn.id"
-                :label="`${fn.tzSectionNumber} — ${fn.functionName}`"
+                :label="nmckFunctionOptionLabel(fn)"
                 :value="fn.id"
               />
               <template #empty>
-                <span class="select-empty">Для выбранного этапа нет функций ТЗ в справочнике.</span>
+                <span class="select-empty">Для выбранного этапа нет функций в справочнике ГК.</span>
               </template>
             </el-select>
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="п.п. НМЦК">
-            <el-input v-model="form.nmckPointText" type="textarea" :rows="2" placeholder="Необязательно" />
+          <el-form-item label="п.п. ТЗ">
+            <el-input
+              :model-value="form.tzPointText"
+              type="textarea"
+              :rows="2"
+              readonly
+              disabled
+              placeholder="Подставится после выбора функции НМЦК"
+              class="tz-autofill-input"
+            />
           </el-form-item>
         </el-col>
       </el-row>
@@ -251,6 +259,24 @@ const contractSelectOptions = computed(() => {
   if (exists) return list
   return [{ id: -1, name: cur }, ...list]
 })
+
+/** Функции этапа в списке по номеру НМЦК для выбора «п.п. НМЦК — функция». */
+const sortedFunctions = computed(() => {
+  return [...functions.value].sort((a, b) => {
+    const cmp = (a.nmckFunctionNumber || '').localeCompare(b.nmckFunctionNumber || '', undefined, {
+      numeric: true,
+    })
+    if (cmp !== 0) return cmp
+    return (a.functionName || '').localeCompare(b.functionName || '', undefined, { sensitivity: 'base' })
+  })
+})
+
+function nmckFunctionOptionLabel(fn: GKFunction) {
+  const n = (fn.nmckFunctionNumber || '').trim()
+  const name = (fn.functionName || '').trim()
+  if (n && name) return `${n} — ${name}`
+  return name || n || '—'
+}
 
 watch(
   () => props.modelValue,
@@ -409,6 +435,11 @@ function onSystemTypeChange() {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   line-height: 1.35;
+}
+
+:deep(.tz-autofill-input.is-disabled .el-textarea__inner) {
+  color: var(--el-text-color-regular);
+  -webkit-text-fill-color: var(--el-text-color-regular);
 }
 
 </style>
