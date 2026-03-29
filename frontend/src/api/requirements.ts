@@ -9,6 +9,8 @@ export async function fetchRequirements(params?: {
   status?: string
   search?: string
   includeArchived?: boolean
+  archivedOnly?: boolean
+  noFunction?: boolean
   implementationQueue?: string
 }) {
   const { data } = await apiClient.get<Requirement[]>('/requirements', { params })
@@ -62,5 +64,30 @@ export async function archiveRequirement(id: number) {
  */
 export async function restoreRequirement(id: number) {
   const { data } = await apiClient.post(`/requirements/${id}/restore`)
+  return data
+}
+
+export async function deleteRequirement(id: number) {
+  await apiClient.delete(`/requirements/${id}`)
+}
+
+export interface RequirementGKLinkInfo {
+  hasFunction: boolean
+  contractId: number
+  functionId: number
+  contractStageId: number
+  contractName: string
+  stageNumber: number
+  stageName: string
+  functionName: string
+  tzSectionNumber: string
+  nmckFunctionNumber: string
+  jiraLink: string
+  tzPointText: string
+  nmckPointText: string
+}
+
+export async function fetchRequirementGKLink(id: number) {
+  const { data } = await apiClient.get<RequirementGKLinkInfo>(`/requirements/${id}/gk-link`)
   return data
 }

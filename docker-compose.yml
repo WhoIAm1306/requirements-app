@@ -1,0 +1,51 @@
+# Запуск на сервере: docker compose up -d
+# Перед первым запуском скопируйте .env из примера и задайте пароли и JWT_SECRET.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-requirements_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      POSTGRES_DB: ${DB_NAME:-requirements_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      PORT: "8080"
+      APP_PORT: "8080"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-requirements_db}
+      DB_USER: ${DB_USER:-requirements_user}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      DB_SSLMODE: disable
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:8080}
+      SUPERUSER_FULL_NAME: ${SUPERUSER_FULL_NAME:-Администратор}
+      SUPERUSER_ORGANIZATION: ${SUPERUSER_ORGANIZATION:-Компания}
+      SUPERUSER_EMAIL: ${SUPERUSER_EMAIL:-admin@example.com}
+      SUPERUSER_PASSWORD: ${SUPERUSER_PASSWORD:?set SUPERUSER_PASSWORD in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+    working_dir: /app
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:

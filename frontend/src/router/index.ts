@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import LoginPage from '@/pages/LoginPage.vue'
 import RequirementsPage from '@/pages/RequirementsPage.vue'
 import AdminUsersPage from '@/pages/AdminUsersPage.vue'
+import GKDirectoryPage from '@/pages/GKDirectoryPage.vue'
 
 // Роутер приложения.
 const router = createRouter({
@@ -15,6 +16,7 @@ const router = createRouter({
       component: AdminUsersPage,
       meta: { requiresAdmin: true },
     },
+    { path: '/gk-directory', component: GKDirectoryPage },
   ],
 })
 

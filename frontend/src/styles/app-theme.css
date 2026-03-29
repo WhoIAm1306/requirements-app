@@ -1,0 +1,47 @@
+/* Корпоративная тема: нейтральная палитра, спокойная типографика */
+
+:root {
+  --app-font: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+  --app-bg: #f0f3f8;
+  --app-surface: #ffffff;
+  --app-border: #d8dee8;
+  --app-text: #1a2332;
+  --app-text-muted: #5c6b7f;
+  --app-primary: #1e4d7b;
+  --app-primary-hover: #163a5e;
+  --app-accent: #2d6a4f;
+  --app-radius-lg: 14px;
+  --app-radius-md: 10px;
+  --app-shadow: 0 4px 20px rgba(26, 35, 50, 0.06);
+}
+
+html,
+body,
+#app {
+  font-family: var(--app-font);
+  color: var(--app-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  background: var(--app-bg);
+}
+
+/* Element Plus: точечная подстройка под официальный стиль */
+.el-button--primary {
+  --el-button-bg-color: var(--app-primary);
+  --el-button-border-color: var(--app-primary);
+  --el-button-hover-bg-color: var(--app-primary-hover);
+  --el-button-hover-border-color: var(--app-primary-hover);
+}
+
+.el-card {
+  --el-card-border-color: var(--app-border);
+  border-radius: var(--app-radius-lg) !important;
+}
+
+.el-table {
+  --el-table-header-bg-color: #eef2f7;
+  --el-table-header-text-color: var(--app-text);
+}

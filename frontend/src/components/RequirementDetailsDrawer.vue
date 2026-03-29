@@ -92,7 +92,26 @@
 
               <el-col :span="12">
                 <el-form-item label="ГК">
-                  <el-input v-model="form.contractName" />
+                  <el-select
+                    v-model="form.contractName"
+                    placeholder="Выберите или введите наименование ГК"
+                    style="width: 100%"
+                    filterable
+                    allow-create
+                    default-first-option
+                    clearable
+                    @change="onContractChange"
+                  >
+                    <el-option
+                      v-for="c in contractSelectOptions"
+                      :key="`${c.id}-${c.name}`"
+                      :label="c.name"
+                      :value="c.name"
+                    />
+                    <template #empty>
+                      <span class="select-empty">В справочнике пока нет ГК — введите наименование вручную.</span>
+                    </template>
+                  </el-select>
                 </el-form-item>
               </el-col>
 
@@ -105,16 +124,19 @@
                     allow-create
                     default-first-option
                   >
-                    <el-option label="Новое" value="Новое" />
-                    <el-option label="Учтено" value="Учтено" />
-                    <el-option label="Выполнено" value="Выполнено" />
+                    <el-option
+                      v-for="s in STANDARD_REQUIREMENT_STATUSES"
+                      :key="s"
+                      :label="s"
+                      :value="s"
+                    />
                   </el-select>
                 </el-form-item>
               </el-col>
 
               <el-col :span="12">
                 <el-form-item label="Система">
-                  <el-select v-model="form.systemType" style="width: 100%">
+                  <el-select v-model="form.systemType" style="width: 100%" @change="onSystemTypeChange">
                     <el-option label="112" value="112" />
                     <el-option label="101" value="101" />
                   </el-select>
@@ -139,9 +161,60 @@
                 </el-form-item>
               </el-col>
 
-              <el-col :span="12">
-                <el-form-item label="Пункт ТЗ">
-                  <el-input v-model="form.tzPointText" />
+              <el-col :span="24">
+                <el-divider />
+
+                <el-row :gutter="16">
+                  <el-col :span="12">
+                    <el-form-item label="Этап">
+                      <el-select
+                        v-model="selectedStageNumber"
+                        placeholder="Сначала выберите ГК"
+                        style="width: 100%"
+                        :disabled="!selectedContractId"
+                        filterable
+                        @change="handleStageChange"
+                      >
+                        <el-option
+                          v-for="stage in stages"
+                          :key="stage.id"
+                          :label="stage.stageName || `Этап ${stage.stageNumber}`"
+                          :value="stage.stageNumber"
+                        />
+                        <template #empty>
+                          <span class="select-empty">К выбранной ГК не добавлены этапы (справочник ГК).</span>
+                        </template>
+                      </el-select>
+                    </el-form-item>
+                  </el-col>
+
+                  <el-col :span="12">
+                    <el-form-item label="п.п. ТЗ">
+                      <el-select
+                        v-model="selectedFunctionId"
+                        placeholder="Сначала выберите этап"
+                        style="width: 100%"
+                        :disabled="!selectedStageNumber"
+                        filterable
+                        clearable
+                        @change="handleFunctionSelected"
+                      >
+                        <el-option
+                          v-for="fn in functions"
+                          :key="fn.id"
+                          :label="`${fn.tzSectionNumber} — ${fn.functionName}`"
+                          :value="fn.id"
+                        />
+                        <template #empty>
+                          <span class="select-empty">Для выбранного этапа нет функций ТЗ в справочнике.</span>
+                        </template>
+                      </el-select>
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+
+                <el-form-item label="п.п. НМЦК">
+                  <el-input v-model="form.nmckPointText" type="textarea" :rows="2" placeholder="Необязательно" />
                 </el-form-item>
               </el-col>
 
@@ -216,8 +289,13 @@
             </div>
 
             <div class="readonly-card">
-              <div class="readonly-label">Пункт ТЗ</div>
+              <div class="readonly-label">п.п. ТЗ</div>
               <div class="readonly-value">{{ item.tzPointText || '—' }}</div>
+            </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">п.п. НМЦК</div>
+              <div class="readonly-value">{{ item.nmckPointText || '—' }}</div>
             </div>
 
             <div class="readonly-card">
@@ -275,6 +353,8 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { fetchQueues } from '@/api/queues'
+import { fetchContracts } from '@/api/contracts'
+import { fetchGKContractDetails, fetchGKFunctionsForStage, fetchGKStages } from '@/api/gkContracts'
 import {
   addRequirementComment,
   archiveRequirement,
@@ -282,7 +362,9 @@ import {
   restoreRequirement,
   updateRequirement,
 } from '@/api/requirements'
-import type { QueueItem, Requirement, RequirementPayload } from '@/types'
+import type { ContractItem, GKFunction, GKStage, QueueItem, Requirement, RequirementPayload } from '@/types'
+import { STANDARD_REQUIREMENT_STATUSES } from '@/constants/requirementStatuses'
+import { initiatorForSystemType } from '@/constants/initiatorBySystem'
 
 /**
  * Props drawer.
@@ -337,6 +419,14 @@ const item = ref<Requirement | null>(null)
  */
 const queues = ref<QueueItem[]>([])
 
+// Данные для связки: ГК -> Этап -> Функция ТЗ.
+const contracts = ref<ContractItem[]>([])
+const selectedContractId = ref<number | null>(null)
+const stages = ref<GKStage[]>([])
+const functions = ref<GKFunction[]>([])
+const selectedStageNumber = ref<number | null>(null)
+const selectedFunctionId = ref<number | null>(null)
+
 /**
  * Текст нового комментария.
  */
@@ -355,10 +445,21 @@ const form = reactive<RequirementPayload>({
   discussionSummary: '',
   implementationQueue: '',
   contractName: '',
+  contractTZFunctionId: null,
   noteText: '',
   tzPointText: '',
+  nmckPointText: '',
   statusText: '',
   systemType: '',
+})
+
+const contractSelectOptions = computed(() => {
+  const list = contracts.value.map((c) => ({ id: c.id, name: c.name }))
+  const cur = (form.contractName || '').trim()
+  if (!cur) return list
+  const exists = list.some((c) => (c.name || '').trim().toLowerCase() === cur.toLowerCase())
+  if (exists) return list
+  return [{ id: -1, name: cur }, ...list]
 })
 
 /**
@@ -385,10 +486,112 @@ function fillForm(data: Requirement) {
   form.discussionSummary = data.discussionSummary || ''
   form.implementationQueue = data.implementationQueue || ''
   form.contractName = data.contractName || ''
+  form.contractTZFunctionId = data.contractTZFunctionId ?? null
   form.noteText = data.noteText || ''
   form.tzPointText = data.tzPointText || ''
+  form.nmckPointText = data.nmckPointText || ''
   form.statusText = data.statusText || ''
   form.systemType = data.systemType || ''
+}
+
+function onSystemTypeChange() {
+  form.initiator = initiatorForSystemType(form.systemType)
+}
+
+async function loadContracts() {
+  try {
+    contracts.value = await fetchContracts()
+  } catch {
+    contracts.value = []
+  }
+}
+
+function resolveContractIdByName(name: string) {
+  const v = (name || '').trim().toLowerCase()
+  if (!v) return null
+  const c = contracts.value.find((x) => (x.name || '').trim().toLowerCase() === v)
+  return c?.id ?? null
+}
+
+async function onContractChange(value: string | null | undefined) {
+  const name = typeof value === 'string' ? value : ''
+  form.contractName = name
+
+  selectedContractId.value = resolveContractIdByName(name)
+  selectedStageNumber.value = null
+  selectedFunctionId.value = null
+  stages.value = []
+  functions.value = []
+
+  form.contractTZFunctionId = null
+  form.tzPointText = ''
+  form.nmckPointText = ''
+
+  if (!name.trim()) return
+  if (!selectedContractId.value) return
+  stages.value = await fetchGKStages(selectedContractId.value)
+}
+
+async function handleStageChange(stageNumber: number | null) {
+  selectedFunctionId.value = null
+  functions.value = []
+  form.contractTZFunctionId = null
+  form.tzPointText = ''
+  form.nmckPointText = ''
+
+  if (!selectedContractId.value || !stageNumber) return
+  functions.value = await fetchGKFunctionsForStage(selectedContractId.value, stageNumber)
+}
+
+function handleFunctionSelected(functionId: number | null) {
+  if (!functionId) {
+    form.contractTZFunctionId = null
+    form.tzPointText = ''
+    form.nmckPointText = ''
+    return
+  }
+
+  const fn = functions.value.find((x) => x.id === functionId)
+  if (!fn) return
+
+  form.contractTZFunctionId = functionId
+  form.tzPointText = `${fn.tzSectionNumber} — ${fn.functionName}`
+  form.nmckPointText = (fn.nmckFunctionNumber || '').trim()
+}
+
+async function initGKSelectionFromRequirement(data: Requirement) {
+  selectedContractId.value = null
+  selectedStageNumber.value = null
+  selectedFunctionId.value = null
+  stages.value = []
+  functions.value = []
+
+  if (!data.contractName) return
+
+  selectedContractId.value = resolveContractIdByName(data.contractName)
+  if (!selectedContractId.value) return
+
+  if (data.contractTZFunctionId) {
+    const details = await fetchGKContractDetails(selectedContractId.value)
+    stages.value = details.stages || []
+
+    const functionId = data.contractTZFunctionId
+    for (const stage of stages.value) {
+      const fn = (stage.functions || []).find((x) => x.id === functionId)
+      if (fn) {
+        selectedStageNumber.value = stage.stageNumber
+        selectedFunctionId.value = fn.id
+        functions.value = stage.functions || []
+        form.contractTZFunctionId = fn.id
+        form.tzPointText = `${fn.tzSectionNumber} — ${fn.functionName}`
+        form.nmckPointText = (fn.nmckFunctionNumber || '').trim() || (data.nmckPointText || '')
+        break
+      }
+    }
+  } else {
+    stages.value = await fetchGKStages(selectedContractId.value)
+    form.nmckPointText = data.nmckPointText || ''
+  }
 }
 
 /**
@@ -399,9 +602,11 @@ async function loadItem() {
 
   try {
     loading.value = true
+    await loadContracts()
     const data = await fetchRequirementById(props.requirementId)
     item.value = data
     fillForm(data)
+    await initGKSelectionFromRequirement(data)
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || 'Ошибка загрузки карточки')
   } finally {
@@ -630,6 +835,14 @@ watch(
 .comment-editor-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.select-empty {
+  display: block;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #5c6b7f;
+  line-height: 1.4;
 }
 
 @media (max-width: 900px) {

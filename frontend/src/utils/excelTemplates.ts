@@ -13,7 +13,8 @@ export function downloadRequirementsTemplate() {
       'Номер очереди при реализации',
       'Примечание',
       'ГК',
-      'Пункт ТЗ',
+      'П.п. ТЗ',
+      'П.п. НМЦК',
       'Статус',
       'Система',
     ],
@@ -29,7 +30,8 @@ export function downloadRequirementsTemplate() {
       'Примечание',
       'ГК ОИБ 2.0',
       'п.3.1.1.1.1.2',
-      'Новое',
+      '1.1.2',
+      'В обработку',
       '112',
     ],
   ]
@@ -50,4 +52,22 @@ export function downloadTZTemplate() {
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Пункты ТЗ')
   XLSX.writeFile(workbook, 'template_tz_points.xlsx')
+}
+
+export function downloadGKFunctionsTemplate() {
+  const rows = [
+    [
+      'Наименование функции',
+      'Этап',
+      'Номер функции по НМЦК',
+      'Номер раздела по ТЗ',
+      'Ссылка на Jira',
+    ],
+    ['Пример функции', '1', '10', '3.1.1', 'https://jira.example/browse/PROJ-1'],
+  ]
+
+  const worksheet = XLSX.utils.aoa_to_sheet(rows)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Функции ТЗ')
+  XLSX.writeFile(workbook, 'template_gk_tz_functions.xlsx')
 }

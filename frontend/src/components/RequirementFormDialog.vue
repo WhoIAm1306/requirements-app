@@ -15,7 +15,7 @@
 
         <el-col :span="12">
           <el-form-item label="Система">
-            <el-select v-model="form.systemType" style="width: 100%">
+            <el-select v-model="form.systemType" style="width: 100%" @change="onSystemTypeChange">
               <el-option label="Система 112" value="112" />
               <el-option label="Система 101" value="101" />
             </el-select>
@@ -79,35 +79,96 @@
       <el-row :gutter="16">
         <el-col :span="24">
           <el-form-item label="Статус">
-            <el-autocomplete
+            <el-select
               v-model="form.statusText"
-              :fetch-suggestions="querySearchStatus"
-              placeholder="Введите статус"
+              placeholder="Статус"
               clearable
+              filterable
+              allow-create
+              default-first-option
               style="width: 100%"
-              :trigger-on-focus="true"
-            />
+            >
+              <el-option v-for="s in STANDARD_REQUIREMENT_STATUSES" :key="s" :label="s" :value="s" />
+            </el-select>
           </el-form-item>
         </el-col>
       </el-row>
       <el-form-item label="ГК">
-        <el-autocomplete
+        <el-select
           v-model="form.contractName"
-          :fetch-suggestions="querySearchContracts"
-          placeholder="Выберите или введите ГК"
+          placeholder="Выберите или введите наименование ГК"
+          style="width: 100%"
+          filterable
+          allow-create
+          default-first-option
           clearable
-          style="width: 100%"
-          :trigger-on-focus="true"
+          @change="onContractChange"
+        >
+          <el-option
+            v-for="c in contractSelectOptions"
+            :key="`${c.id}-${c.name}`"
+            :label="c.name"
+            :value="c.name"
           />
+          <template #empty>
+            <span class="select-empty">В справочнике пока нет ГК — введите наименование вручную.</span>
+          </template>
+        </el-select>
       </el-form-item>
-      <el-form-item label="Пункт ТЗ">
-        <el-autocomplete
-          v-model="form.tzPointText"
-          :fetch-suggestions="querySearchTZ"
-          placeholder="Выберите или введите свой вариант"
+
+      <el-divider />
+
+      <el-form-item label="Этап">
+        <el-select
+          v-model="selectedStageNumber"
+          placeholder="Сначала выберите ГК"
           style="width: 100%"
-        />
+          :disabled="!selectedContractId"
+          filterable
+          @change="handleStageChange"
+        >
+          <el-option
+            v-for="stage in stages"
+            :key="stage.id"
+            :label="stage.stageName || `Этап ${stage.stageNumber}`"
+            :value="stage.stageNumber"
+          />
+          <template #empty>
+            <span class="select-empty">К выбранной ГК не добавлены этапы (справочник ГК).</span>
+          </template>
+        </el-select>
       </el-form-item>
+
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item label="п.п. ТЗ">
+            <el-select
+              v-model="selectedFunctionId"
+              placeholder="Сначала выберите этап"
+              style="width: 100%"
+              :disabled="!selectedStageNumber"
+              filterable
+              clearable
+              @change="handleFunctionSelected"
+            >
+              <el-option
+                v-for="fn in functions"
+                :key="fn.id"
+                :label="`${fn.tzSectionNumber} — ${fn.functionName}`"
+                :value="fn.id"
+              />
+              <template #empty>
+                <span class="select-empty">Для выбранного этапа нет функций ТЗ в справочнике.</span>
+              </template>
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="п.п. НМЦК">
+            <el-input v-model="form.nmckPointText" type="textarea" :rows="2" placeholder="Необязательно" />
+          </el-form-item>
+        </el-col>
+      </el-row>
 
       <el-form-item label="Примечание">
         <el-input v-model="form.noteText" type="textarea" :rows="3" />
@@ -122,14 +183,19 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { createRequirement } from '@/api/requirements'
-import { fetchTZPointSuggestions } from '@/api/dictionaries'
 import { createQueue, fetchQueues } from '@/api/queues'
+import { fetchContracts } from '@/api/contracts'
 import { useAuthStore } from '@/stores/auth'
-import type { QueueItem, RequirementPayload } from '@/types'
-import { searchContracts } from '@/api/contracts'
+import { fetchGKFunctionsForStage, fetchGKStages } from '@/api/gkContracts'
+import type { GKFunction, GKStage, QueueItem, RequirementPayload } from '@/types'
+import {
+  DEFAULT_REQUIREMENT_STATUS,
+  STANDARD_REQUIREMENT_STATUSES,
+} from '@/constants/requirementStatuses'
+import { initiatorForSystemType } from '@/constants/initiatorBySystem'
 
 const props = defineProps<{
   modelValue: boolean
@@ -143,10 +209,17 @@ const emit = defineEmits<{
 const authStore = useAuthStore()
 const loading = defineModel<boolean>('loading', { default: false })
 const queues = ref<QueueItem[]>([])
+const contracts = ref<{ id: number; name: string }[]>([])
+
+const selectedContractId = ref<number | null>(null)
+const stages = ref<GKStage[]>([])
+const functions = ref<GKFunction[]>([])
+const selectedStageNumber = ref<number | null>(null)
+const selectedFunctionId = ref<number | null>(null)
 
 const emptyForm = (): RequirementPayload => ({
   shortName: '',
-  initiator: '',
+  initiator: initiatorForSystemType('112'),
   responsiblePerson: authStore.fullName,
   sectionName: '',
   proposalText: '',
@@ -155,19 +228,36 @@ const emptyForm = (): RequirementPayload => ({
   implementationQueue: '1 очередь',
   noteText: '',
   tzPointText: '',
-  statusText: 'Новое',
+  nmckPointText: '',
+  contractTZFunctionId: null,
+  statusText: DEFAULT_REQUIREMENT_STATUS,
   systemType: '112',
   contractName: '',
 })
 
 const form = reactive<RequirementPayload>(emptyForm())
 
+const contractSelectOptions = computed(() => {
+  const list = contracts.value.map((c) => ({ id: c.id, name: c.name }))
+  const cur = (form.contractName || '').trim()
+  if (!cur) return list
+  const exists = list.some((c) => (c.name || '').trim().toLowerCase() === cur.toLowerCase())
+  if (exists) return list
+  return [{ id: -1, name: cur }, ...list]
+})
+
 watch(
   () => props.modelValue,
   async (value) => {
     if (value) {
       await loadQueues()
+      await loadContracts()
       Object.assign(form, emptyForm())
+      selectedContractId.value = null
+      stages.value = []
+      functions.value = []
+      selectedStageNumber.value = null
+      selectedFunctionId.value = null
       if (queues.value.length && !form.implementationQueue) {
         form.implementationQueue = queues.value[0].name
       }
@@ -178,10 +268,17 @@ watch(
 async function loadQueues() {
   try {
     queues.value = await fetchQueues()
-    console.log('queues loaded', queues.value)
   } catch (error: any) {
     console.error('queues load error', error)
     queues.value = []
+  }
+}
+
+async function loadContracts() {
+  try {
+    contracts.value = await fetchContracts()
+  } catch {
+    contracts.value = []
   }
 }
 
@@ -204,13 +301,58 @@ async function openAddQueueDialog() {
   }
 }
 
-async function querySearchTZ(queryString: string, cb: (arg: Array<{ value: string }>) => void) {
-  try {
-    const data = await fetchTZPointSuggestions(queryString)
-    cb(data.map((item) => ({ value: item })))
-  } catch {
-    cb([])
+function resolveContractIdByName(contractName: string) {
+  const name = (contractName || '').trim().toLowerCase()
+  if (!name) return null
+  const c = contracts.value.find((x) => (x.name || '').trim().toLowerCase() === name)
+  return c?.id ?? null
+}
+
+async function onContractChange(value: string | null | undefined) {
+  const name = typeof value === 'string' ? value : ''
+  form.contractName = name
+  const id = resolveContractIdByName(name)
+  selectedContractId.value = id
+
+  selectedStageNumber.value = null
+  selectedFunctionId.value = null
+  stages.value = []
+  functions.value = []
+
+  form.contractTZFunctionId = null
+  form.tzPointText = ''
+  form.nmckPointText = ''
+
+  if (!name.trim()) return
+  if (!id) return
+  stages.value = await fetchGKStages(id)
+}
+
+async function handleStageChange(stageNumber: number | null) {
+  selectedFunctionId.value = null
+  functions.value = []
+  form.contractTZFunctionId = null
+  form.tzPointText = ''
+  form.nmckPointText = ''
+
+  if (!selectedContractId.value || !stageNumber) return
+  functions.value = await fetchGKFunctionsForStage(selectedContractId.value, stageNumber)
+}
+
+function handleFunctionSelected(functionId: number | null) {
+  if (!functionId) {
+    form.contractTZFunctionId = null
+    form.tzPointText = ''
+    form.nmckPointText = ''
+    return
   }
+
+  const fn = functions.value.find((x) => x.id === functionId)
+  if (!fn) return
+
+  form.contractTZFunctionId = functionId
+  form.tzPointText = `${fn.tzSectionNumber} — ${fn.functionName}`
+  form.nmckPointText = (fn.nmckFunctionNumber || '').trim()
 }
 
 async function submit() {
@@ -227,30 +369,8 @@ async function submit() {
   }
 }
 
-const baseStatuses = ['Новое', 'Учтено', 'Выполнено']
-
-function querySearchStatus(queryString: string, cb: (arg: Array<{ value: string }>) => void) {
-  const value = queryString.trim().toLowerCase()
-
-  if (!value) {
-    cb(baseStatuses.map((item) => ({ value: item })))
-    return
-  }
-
-  const results = baseStatuses
-    .filter((item) => item.toLowerCase().includes(value))
-    .map((item) => ({ value: item }))
-
-  cb(results)
-}
-
-async function querySearchContracts(queryString: string, cb: (arg: Array<{ value: string }>) => void) {
-  try {
-    const data = await searchContracts(queryString)
-    cb(data.map((item) => ({ value: item })))
-  } catch {
-    cb([])
-  }
+function onSystemTypeChange() {
+  form.initiator = initiatorForSystemType(form.systemType)
 }
 </script>
 
@@ -264,6 +384,14 @@ async function querySearchContracts(queryString: string, cb: (arg: Array<{ value
   padding-top: 8px;
   display: flex;
   justify-content: flex-start;
+}
+
+.select-empty {
+  display: block;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #5c6b7f;
+  line-height: 1.4;
 }
 
 </style>

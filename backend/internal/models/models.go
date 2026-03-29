@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 // Requirement — основная сущность предложения.
 type Requirement struct {
@@ -15,8 +19,14 @@ type Requirement struct {
 	DiscussionSummary   string     `gorm:"type:text" json:"discussionSummary"`
 	ImplementationQueue string     `gorm:"size:100;index" json:"implementationQueue"`
 	ContractName        string     `gorm:"size:255;index" json:"contractName"`
+	// ContractTZFunctionID — привязка выбранной функции ТЗ (по этапу/номер раздела/наименование).
+	// Заполняется при выборе функции в форме ГК.
+	ContractTZFunctionID *uint    `gorm:"index" json:"contractTZFunctionId"`
 	NoteText            string     `gorm:"type:text" json:"noteText"`
-	TZPointText         string     `gorm:"type:text" json:"tzPointText"`
+	// TZPointText — отображаемый п.п. ТЗ (вручную или из функции справочника).
+	TZPointText string `gorm:"type:text" json:"tzPointText"`
+	// NmckPointText — п.п. НМЦК (вручную или номер по НМЦК из функции).
+	NmckPointText string `gorm:"type:text" json:"nmckPointText"`
 	StatusText          string     `gorm:"size:100" json:"statusText"`
 	SystemType          string     `gorm:"size:50;index" json:"systemType"`
 	AuthorName          string     `gorm:"size:255" json:"authorName"`
@@ -29,7 +39,8 @@ type Requirement struct {
 	ArchivedAt          *time.Time `json:"archivedAt"`
 	ArchivedBy          string     `gorm:"size:255" json:"archivedBy"`
 	ArchivedByOrg       string     `gorm:"size:50" json:"archivedByOrg"`
-	Comments            []Comment  `json:"comments,omitempty"`
+	DeletedAt           gorm.DeletedAt `gorm:"index" json:"-"`
+	Comments            []Comment      `json:"comments,omitempty"`
 }
 
 // Comment — комментарий внутри карточки предложения.
@@ -71,7 +82,56 @@ type QueueDictionary struct {
 type ContractDictionary struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	Name      string    `gorm:"size:255;uniqueIndex" json:"name"`
+	Description string   `gorm:"type:text" json:"description"`
 	IsActive  bool      `gorm:"default:true" json:"isActive"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// ContractStage — этапы внутри ГК.
+// Этапы нумеруются числами: этап 1, этап 2, ...
+type ContractStage struct {
+	ID           uint                  `gorm:"primaryKey" json:"id"`
+	ContractID   uint                  `gorm:"index;uniqueIndex:idx_contract_stage_number" json:"contractId"`
+	StageNumber  int                   `gorm:"uniqueIndex:idx_contract_stage_number" json:"stageNumber"`
+	StageName    string                `gorm:"size:255" json:"stageName"`
+	Functions    []ContractTZFunction `gorm:"foreignKey:ContractStageID" json:"functions,omitempty"`
+	CreatedAt    time.Time             `json:"createdAt"`
+	UpdatedAt    time.Time             `json:"updatedAt"`
+}
+
+// ContractTZFunction — функция ТЗ, привязанная к ГК и этапу.
+type ContractTZFunction struct {
+	ID uint `gorm:"primaryKey" json:"id"`
+
+	ContractID      uint      `gorm:"index" json:"contractId"`
+	ContractStageID uint      `gorm:"uniqueIndex:idx_stage_fn_nmck_tzsection" json:"contractStageId"`
+
+	FunctionName       string    `gorm:"type:text" json:"functionName"`
+	// NMCKFunctionNumber — номер функции по НМЦК.
+	// Может быть дробным/структурным форматом (например, "1.1.2"), поэтому хранится строкой.
+	NMCKFunctionNumber string    `gorm:"uniqueIndex:idx_stage_fn_nmck_tzsection" json:"nmckFunctionNumber"`
+	TZSectionNumber    string    `gorm:"size:100;uniqueIndex:idx_stage_fn_nmck_tzsection" json:"tzSectionNumber"`
+	// JiraLink — опциональная ссылка на задачу в Jira.
+	JiraLink string `gorm:"type:text" json:"jiraLink"`
+
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// ContractAttachment — прикрепленные файлы к ГК (ТЗ / НМЦК).
+type ContractAttachment struct {
+	ID uint `gorm:"primaryKey" json:"id"`
+
+	ContractID uint `gorm:"index" json:"contractId"`
+
+	// Type: "tz" | "nmck"
+	Type string `gorm:"size:10;index" json:"type"`
+
+	OriginalFileName string `gorm:"size:255" json:"originalFileName"`
+	StoredFileName   string `gorm:"size:255" json:"storedFileName"`
+	ContentType      string `gorm:"size:255" json:"contentType"`
+	FilePath         string `gorm:"size:1024" json:"filePath"`
+
 	CreatedAt time.Time `json:"createdAt"`
 }
 

@@ -38,6 +38,9 @@ func NewPostgres(cfg *config.Config) (*gorm.DB, error) {
 		&models.AuthorDictionary{},
 		&models.QueueDictionary{},
 		&models.ContractDictionary{},
+		&models.ContractStage{},
+		&models.ContractTZFunction{},
+		&models.ContractAttachment{},
 		&models.User{},
 	)
 	if err != nil {

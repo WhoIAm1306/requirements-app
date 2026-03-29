@@ -47,11 +47,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { importRequirementsFile, importTZPointsFile, type ImportResult } from '@/api/imports'
+import { importGKFunctionsFile, importRequirementsFile, importTZPointsFile, type ImportResult } from '@/api/imports'
 
 const props = defineProps<{
   modelValue: boolean
-  mode: 'requirements' | 'tz'
+  mode: 'requirements' | 'tz' | 'gkFunctions'
+  contractId?: number
 }>()
 
 const emit = defineEmits<{
@@ -64,13 +65,19 @@ const selectedFile = ref<File | null>(null)
 const result = ref<ImportResult | null>(null)
 
 const title = computed(() =>
-  props.mode === 'requirements' ? 'Импорт предложений из Excel' : 'Импорт пунктов ТЗ из Excel',
+  props.mode === 'requirements'
+    ? 'Импорт предложений из Excel'
+    : props.mode === 'tz'
+      ? 'Импорт пунктов ТЗ из Excel'
+      : 'Импорт функций ТЗ для ГК из Excel',
 )
 
 const description = computed(() =>
   props.mode === 'requirements'
     ? 'Загрузите .xlsx файл с предложениями. Идентификаторы задач будут присвоены автоматически.'
-    : 'Загрузите .xlsx файл со справочником пунктов ТЗ.',
+    : props.mode === 'tz'
+      ? 'Загрузите .xlsx файл со справочником пунктов ТЗ.'
+      : 'Загрузите .xlsx файл с функциями ТЗ для выбранного ГК. Заполните колонки: Наименование функции, Этап, Номер функции по НМЦК, Номер раздела по ТЗ.',
 )
 
 function handleFileChange(event: Event) {
@@ -91,8 +98,10 @@ async function submit() {
 
     if (props.mode === 'requirements') {
       result.value = await importRequirementsFile(selectedFile.value)
-    } else {
+    } else if (props.mode === 'tz') {
       result.value = await importTZPointsFile(selectedFile.value)
+    } else {
+      result.value = await importGKFunctionsFile(selectedFile.value, props.contractId)
     }
 
     ElMessage.success('Импорт завершён')

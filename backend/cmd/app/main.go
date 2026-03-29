@@ -36,6 +36,7 @@ func main() {
 	userHandler := handlers.NewUserHandler(database)
 	requirementHandler := handlers.NewRequirementHandler(database)
 	dictionaryHandler := handlers.NewDictionaryHandler(database)
+	contractDirectoryHandler := handlers.NewContractDirectoryHandler(database)
 
 	// Создаём gin router.
 	r := gin.Default()
@@ -79,12 +80,18 @@ func main() {
 
 		read.GET("/requirements", requirementHandler.List)
 		read.GET("/requirements/:id", requirementHandler.GetByID)
+		read.GET("/requirements/:id/gk-link", requirementHandler.GetGKLink)
 		read.GET("/export/requirements", requirementHandler.ExportRequirements)
 
 		read.GET("/authors", dictionaryHandler.SearchAuthors)
 		read.GET("/tz-points", dictionaryHandler.SearchTZPoints)
 		read.GET("/contracts", dictionaryHandler.ListContracts)
 		read.GET("/contracts/search", dictionaryHandler.SearchContracts)
+		read.GET("/contracts/:id", contractDirectoryHandler.GetContractDetails)
+		read.GET("/contracts/:id/stages", contractDirectoryHandler.ListStages)
+		read.GET("/contracts/:id/stages/:stageNumber/functions", contractDirectoryHandler.ListFunctionsForStage)
+		read.GET("/contracts/:id/attachments", contractDirectoryHandler.ListContractAttachments)
+		read.GET("/contracts/attachments/:attachmentId/download", contractDirectoryHandler.DownloadContractAttachment)
 		read.GET("/queues", dictionaryHandler.ListQueues)
 	}
 
@@ -94,14 +101,27 @@ func main() {
 	{
 		edit.POST("/requirements", requirementHandler.Create)
 		edit.PUT("/requirements/:id", requirementHandler.Update)
+		edit.DELETE("/requirements/:id", requirementHandler.Delete)
 		edit.POST("/requirements/:id/comments", requirementHandler.AddComment)
 		edit.POST("/requirements/:id/archive", requirementHandler.Archive)
 		edit.POST("/requirements/:id/restore", requirementHandler.Restore)
+
+		edit.POST("/contracts", contractDirectoryHandler.CreateContract)
+		edit.PUT("/contracts/:id", contractDirectoryHandler.UpdateContract)
+		edit.POST("/contracts/:id/stages", contractDirectoryHandler.CreateStage)
+		edit.POST("/contracts/:id/functions", contractDirectoryHandler.UpsertTZFunction)
+		edit.POST("/contracts/:id/attachments", contractDirectoryHandler.UploadContractAttachments)
+
+		edit.DELETE("/contracts/attachments/:attachmentId", contractDirectoryHandler.DeleteContractAttachment)
+		edit.DELETE("/contracts/:id/functions/:functionId", contractDirectoryHandler.DeleteTZFunction)
+		edit.DELETE("/contracts/:id/stages/:stageNumber", contractDirectoryHandler.DeleteStage)
+		edit.DELETE("/contracts/:id", contractDirectoryHandler.DeleteContract)
 
 		edit.POST("/queues", dictionaryHandler.CreateQueue)
 
 		edit.POST("/import/requirements", requirementHandler.ImportRequirements)
 		edit.POST("/import/tz-points", dictionaryHandler.ImportTZPoints)
+		edit.POST("/import/gk-tz-functions", contractDirectoryHandler.ImportTZFunctionsFromExcel)
 	}
 
 	// Административные маршруты только для суперпользователя.

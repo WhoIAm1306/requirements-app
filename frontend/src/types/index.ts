@@ -76,7 +76,73 @@ export interface QueueItem {
 export interface ContractItem {
   id: number
   name: string
+  description?: string
   isActive: boolean
+  createdAt: string
+}
+
+// Этапы ГК.
+export interface GKStage {
+  id: number
+  contractId: number
+  stageNumber: number
+  stageName: string
+  createdAt: string
+  updatedAt: string
+  functions?: GKFunction[]
+}
+
+// Функции ТЗ, привязанные к ГК и этапу.
+export interface GKFunction {
+  id: number
+  contractId: number
+  contractStageId: number
+  functionName: string
+  nmckFunctionNumber: string
+  tzSectionNumber: string
+  jiraLink?: string
+  createdAt: string
+  updatedAt: string
+}
+
+// Детали ГК вместе с этапами и функциями.
+export interface GKContractDetails {
+  id: number
+  name: string
+  description: string
+  isActive: boolean
+  createdAt: string
+  stages: GKStage[]
+}
+
+export interface CreateGKContractPayload {
+  name: string
+  description: string
+}
+
+export interface UpdateGKContractPayload {
+  name: string
+  description: string
+}
+
+export interface CreateGKStagePayload {
+  stageNumber: number
+  stageName: string
+}
+
+export interface UpsertGKFunctionPayload {
+  stageNumber: number
+  functionName: string
+  nmckFunctionNumber: string
+  tzSectionNumber: string
+  jiraLink?: string
+}
+
+export interface ContractAttachmentItem {
+  id: number
+  contractId: number
+  type: 'tz' | 'nmck' | string
+  originalFileName: string
   createdAt: string
 }
 
@@ -103,8 +169,10 @@ export interface Requirement {
   discussionSummary: string
   implementationQueue: string
   contractName: string
+  contractTZFunctionId?: number | null
   noteText: string
   tzPointText: string
+  nmckPointText?: string
   statusText: string
   systemType: string
   authorName: string
@@ -131,8 +199,10 @@ export interface RequirementPayload {
   discussionSummary: string
   implementationQueue: string
   contractName: string
+  contractTZFunctionId?: number | null
   noteText: string
   tzPointText: string
+  nmckPointText: string
   statusText: string
   systemType: string
 }

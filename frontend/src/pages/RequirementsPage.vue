@@ -12,46 +12,23 @@
         </div>
 
         <div class="header-actions">
-          <!--
-            Кнопка пользователей доступна только суперпользователю.
-          -->
-          <el-button v-if="authStore.isSuperuser" @click="router.push('/admin/users')">
-            Пользователи
-          </el-button>
-
-          <!--
-            Для read-only пользователя оставляем только экспорт, профиль и выход.
-          -->
-          <el-button v-if="canEdit" type="primary" @click="createDialogVisible = true">
-            Добавить запись
-          </el-button>
-
-          <el-button v-if="canEdit" @click="importRequirementsVisible = true">
-            Импорт предложений
-          </el-button>
-
-          <el-button v-if="canEdit" @click="importTZVisible = true">
-            Импорт ТЗ
-          </el-button>
-
-          <el-button v-if="canEdit" @click="downloadRequirementsTemplate()">
-            Шаблон предложений
-          </el-button>
-
-          <el-button v-if="canEdit" @click="downloadTZTemplate()">
-            Шаблон ТЗ
-          </el-button>
-
-          <el-button @click="handleExport">Экспорт Excel</el-button>
-
-          <!--
-            Профиль перенесён перед кнопкой выхода и окрашен отдельно.
-          -->
-          <el-button class="profile-button" type="success" plain @click="profileDrawerVisible = true">
-            Профиль
-          </el-button>
-
-          <el-button @click="handleLogout">Выйти</el-button>
+          <div class="header-before-avatar">
+            <el-button v-if="authStore.isSuperuser" @click="router.push('/admin/users')">
+              Пользователи
+            </el-button>
+            <el-button @click="router.push('/gk-directory')">Справочник ГК</el-button>
+          </div>
+          <el-dropdown trigger="click" placement="bottom-end" @command="handleUserMenuCommand">
+            <button type="button" class="user-avatar-btn" :title="authStore.fullName">
+              {{ userAvatarLetters }}
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="profile">Профиль</el-dropdown-item>
+                <el-dropdown-item divided command="logout">Выйти</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
 
@@ -60,6 +37,11 @@
         <el-card class="summary-card" shadow="hover">
           <div class="summary-label">Всего записей</div>
           <div class="summary-value">{{ items.length }}</div>
+        </el-card>
+
+        <el-card class="summary-card" shadow="hover">
+          <div class="summary-label">В обработку</div>
+          <div class="summary-value">{{ countByStatus('В обработку') }}</div>
         </el-card>
 
         <el-card class="summary-card" shadow="hover">
@@ -81,10 +63,8 @@
           <div class="summary-label">Другие статусы</div>
           <div class="summary-value">
             {{
-              items.filter(
-                (item) =>
-                  !['Новое', 'Учтено', 'Выполнено'].includes((item.statusText || '').trim()),
-              ).length
+              items.filter((item) => !isStandardRequirementStatus((item.statusText || '').trim()))
+                .length
             }}
           </div>
         </el-card>
@@ -102,75 +82,105 @@
 
       <!-- Фильтры -->
       <el-card class="toolbar-card" shadow="never">
-        <div class="top-actions">
-          <div class="main-filters">
-            <el-button
-              :type="systemType === '112' ? 'primary' : 'default'"
-              @click="setSystem('112')"
-            >
-              Система 112
-            </el-button>
+        <div class="toolbar-row">
+          <div class="toolbar-left">
+            <div class="main-filters">
+              <el-button
+                :type="systemType === '112' ? 'primary' : 'default'"
+                @click="setSystem('112')"
+              >
+                Система 112
+              </el-button>
 
-            <el-button
-              :type="systemType === '101' ? 'primary' : 'default'"
-              @click="setSystem('101')"
-            >
-              Система 101
-            </el-button>
+              <el-button
+                :type="systemType === '101' ? 'primary' : 'default'"
+                @click="setSystem('101')"
+              >
+                Система 101
+              </el-button>
 
-            <el-button
-              :type="systemType === '' ? 'primary' : 'default'"
-              @click="setSystem('')"
-            >
-              Все
-            </el-button>
+              <el-button
+                :type="systemType === '' ? 'primary' : 'default'"
+                @click="setSystem('')"
+              >
+                Все
+              </el-button>
+            </div>
+
+            <div class="search-row">
+              <el-input
+                v-model="search"
+                placeholder="Поиск по ID, названию, инициатору, ответственному"
+                clearable
+                class="search-input"
+              />
+
+              <el-select
+                v-model="status"
+                placeholder="Статус"
+                clearable
+                filterable
+                allow-create
+                default-first-option
+                class="status-select"
+              >
+                <el-option
+                  v-for="s in STANDARD_REQUIREMENT_STATUSES"
+                  :key="s"
+                  :label="s"
+                  :value="s"
+                />
+              </el-select>
+
+              <el-select
+                v-model="implementationQueue"
+                placeholder="Очередь"
+                clearable
+                class="queue-select"
+              >
+                <el-option
+                  v-for="queue in queues"
+                  :key="queue.id"
+                  :label="queue.name"
+                  :value="queue.name"
+                />
+              </el-select>
+
+              <el-select v-model="archiveFilterMode" placeholder="Записи" class="archive-filter-select">
+                <el-option label="Только активные" value="active" />
+                <el-option label="Активные и архив" value="all" />
+                <el-option label="Только архивные" value="archived_only" />
+              </el-select>
+
+              <el-checkbox v-model="filterNoFunction" class="filter-no-fn">
+                Функция не указана
+              </el-checkbox>
+
+              <el-tooltip content="Сбросить фильтры" placement="top">
+                <el-button class="reset-filters-btn" circle size="small" @click="resetFilters">
+                  <el-icon><Close /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
           </div>
 
-          <div class="search-row">
-            <el-input
-              v-model="search"
-              placeholder="Поиск по ID, названию, инициатору, ответственному"
-              clearable
-              class="search-input"
-              @keyup.enter="loadData"
-            />
-
-            <el-select
-              v-model="status"
-              placeholder="Статус"
-              clearable
-              filterable
-              allow-create
-              default-first-option
-              class="status-select"
-            >
-              <el-option label="Новое" value="Новое" />
-              <el-option label="Учтено" value="Учтено" />
-              <el-option label="Выполнено" value="Выполнено" />
-            </el-select>
-
-            <el-select
-              v-model="implementationQueue"
-              placeholder="Очередь"
-              clearable
-              class="queue-select"
-              @change="loadData"
-            >
-              <el-option
-                v-for="queue in queues"
-                :key="queue.id"
-                :label="queue.name"
-                :value="queue.name"
-              />
-            </el-select>
-
-            <el-checkbox v-model="includeArchived" @change="loadData">
-              Показывать архив
-            </el-checkbox>
-
-            <el-button type="primary" @click="loadData">Найти</el-button>
-            <el-button @click="resetFilters">Сбросить</el-button>
-            <el-button @click="loadData">Обновить</el-button>
+          <div class="toolbar-right">
+            <el-button v-if="canEdit" type="primary" @click="createDialogVisible = true">
+              Добавить запись
+            </el-button>
+            <el-dropdown v-if="canEdit" trigger="click" @command="handleImportMenuCommand">
+              <el-button>
+                Ещё
+                <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="import">Импорт предложений</el-dropdown-item>
+                  <el-dropdown-item command="template">Шаблон предложений (Excel)</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-button @click="handleExport">Экспорт Excel</el-button>
           </div>
         </div>
       </el-card>
@@ -191,7 +201,7 @@
               row-key="id"
               stripe
               border
-              empty-text="Нет данных"
+              empty-text="Нет предложений по выбранным условиям"
               :row-class-name="getRowClassName"
               table-layout="fixed"
               :fit="false"
@@ -233,6 +243,19 @@
                 show-overflow-tooltip
               />
 
+              <el-table-column label="п.п. ТЗ" width="220" class-name="tz-col">
+                <template #default="{ row }">
+                  <button
+                    type="button"
+                    class="tz-cell-link"
+                    :disabled="!tzCellLabel(row)"
+                    @click.stop="openTzInfo(row)"
+                  >
+                    {{ tzCellLabel(row) || '—' }}
+                  </button>
+                </template>
+              </el-table-column>
+
               <el-table-column prop="statusText" label="Статус" width="150">
                 <template #default="{ row }">
                   <StatusTag :status="row.statusText" />
@@ -266,7 +289,7 @@
               <!--
                 В read-only режиме оставляем только кнопку открытия карточки.
               -->
-              <el-table-column label="" width="150" align="center">
+              <el-table-column label="" width="200" align="center">
                 <template #default="{ row }">
                   <div class="row-actions">
                     <el-tooltip content="Открыть" placement="top">
@@ -276,6 +299,12 @@
                     </el-tooltip>
 
                     <template v-if="canEdit">
+                      <el-tooltip content="Удалить запись" placement="top">
+                        <el-button size="small" circle type="danger" plain @click.stop="handleDelete(row)">
+                          <el-icon><Delete /></el-icon>
+                        </el-button>
+                      </el-tooltip>
+
                       <el-tooltip v-if="!row.isArchived" content="В архив" placement="top">
                         <el-button size="small" circle type="warning" @click.stop="handleArchive(row)">
                           <el-icon><FolderDelete /></el-icon>
@@ -331,14 +360,14 @@
         @imported="loadData"
       />
 
-      <ImportExcelDialog
-        v-if="canEdit"
-        v-model="importTZVisible"
-        mode="tz"
-        @imported="loadData"
-      />
-
       <ProfileDrawer v-model="profileDrawerVisible" />
+
+      <RequirementTzInfoDialog
+        v-model="tzInfoVisible"
+        :requirement-id="tzInfoRequirementId"
+        :can-edit="canEdit"
+        @updated="loadData"
+      />
     </div>
   </div>
 </template>
@@ -346,19 +375,29 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { FolderDelete, RefreshRight, View } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowDown, Close, Delete, FolderDelete, RefreshRight, View } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { archiveRequirement, fetchRequirements, restoreRequirement } from '@/api/requirements'
+import {
+  archiveRequirement,
+  deleteRequirement,
+  fetchRequirements,
+  restoreRequirement,
+} from '@/api/requirements'
 import { exportRequirementsFile } from '@/api/export'
 import { fetchQueues } from '@/api/queues'
-import { downloadRequirementsTemplate, downloadTZTemplate } from '@/utils/excelTemplates'
+import { downloadRequirementsTemplate } from '@/utils/excelTemplates'
 import RequirementFormDialog from '@/components/RequirementFormDialog.vue'
 import RequirementDetailsDrawer from '@/components/RequirementDetailsDrawer.vue'
 import ImportExcelDialog from '@/components/ImportExcelDialog.vue'
 import ProfileDrawer from '@/components/ProfileDrawer.vue'
+import RequirementTzInfoDialog from '@/components/RequirementTzInfoDialog.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import QueueTag from '@/components/QueueTag.vue'
+import {
+  STANDARD_REQUIREMENT_STATUSES,
+  isStandardRequirementStatus,
+} from '@/constants/requirementStatuses'
 import type { QueueItem, Requirement } from '@/types'
 
 /**
@@ -385,8 +424,11 @@ const createDialogVisible = ref(false)
 const detailsVisible = ref(false)
 const profileDrawerVisible = ref(false)
 const importRequirementsVisible = ref(false)
-const importTZVisible = ref(false)
 const selectedRequirementId = ref<number | null>(null)
+const tzInfoVisible = ref(false)
+const tzInfoRequirementId = ref<number | null>(null)
+
+const archiveFilterMode = ref<'active' | 'all' | 'archived_only'>('active')
 
 /**
  * Основные данные таблицы и справочники.
@@ -400,7 +442,6 @@ const queues = ref<QueueItem[]>([])
 const search = ref('')
 const status = ref('')
 const systemType = ref('')
-const includeArchived = ref(false)
 const implementationQueue = ref('')
 
 /**
@@ -412,7 +453,32 @@ const floatingScrollbarRef = ref<HTMLElement | null>(null)
 /**
  * Ширина таблицы = сумма ширин колонок.
  */
-const tableWidth = 2440
+/** Сумма фиксированных ширин колонок (table-layout: fixed). */
+const tableWidth = 2710
+
+const filterNoFunction = ref(false)
+
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+/** Счётчик запросов списка: отбрасываем устаревшие ответы при гонке поиска и фильтров. */
+let loadListSeq = 0
+
+function clearSearchDebounce() {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+}
+
+const userAvatarLetters = computed(() => {
+  const name = (authStore.fullName || '').trim()
+  if (!name) return '?'
+  const parts = name.split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase()
+  }
+  return name.slice(0, 2).toUpperCase()
+})
 
 /**
  * Состояние плавающего scrollbar.
@@ -450,7 +516,6 @@ function formatDateShort(value: string) {
  */
 function setSystem(value: string) {
   systemType.value = value
-  loadData()
 }
 
 /**
@@ -460,8 +525,10 @@ function resetFilters() {
   search.value = ''
   status.value = ''
   systemType.value = ''
-  includeArchived.value = false
+  archiveFilterMode.value = 'active'
   implementationQueue.value = ''
+  filterNoFunction.value = false
+  clearSearchDebounce()
   loadData()
 }
 
@@ -493,21 +560,38 @@ async function loadQueues() {
 /**
  * Загрузка таблицы.
  */
+function archiveQueryParams() {
+  const mode = archiveFilterMode.value
+  if (mode === 'archived_only') {
+    return { archivedOnly: true as const }
+  }
+  if (mode === 'all') {
+    return { includeArchived: true as const }
+  }
+  return {}
+}
+
 async function loadData() {
+  const seq = ++loadListSeq
   try {
     loading.value = true
 
-    items.value = await fetchRequirements({
+    const arch = archiveQueryParams()
+    const data = await fetchRequirements({
       systemType: systemType.value || undefined,
       status: status.value || undefined,
       search: search.value || undefined,
-      includeArchived: includeArchived.value || undefined,
       implementationQueue: implementationQueue.value || undefined,
+      noFunction: filterNoFunction.value || undefined,
+      ...arch,
     })
+    if (seq !== loadListSeq) return
+    items.value = data
   } catch (error: any) {
+    if (seq !== loadListSeq) return
     ElMessage.error(error?.response?.data?.message || 'Ошибка загрузки')
   } finally {
-    loading.value = false
+    if (seq === loadListSeq) loading.value = false
   }
 }
 
@@ -516,12 +600,14 @@ async function loadData() {
  */
 async function handleExport() {
   try {
+    const arch = archiveQueryParams()
     const blob = await exportRequirementsFile({
       systemType: systemType.value || undefined,
       status: status.value || undefined,
       search: search.value || undefined,
-      includeArchived: includeArchived.value || undefined,
       implementationQueue: implementationQueue.value || undefined,
+      noFunction: filterNoFunction.value || undefined,
+      ...arch,
     })
 
     const url = window.URL.createObjectURL(new Blob([blob]))
@@ -569,6 +655,67 @@ async function handleRestore(row: Requirement) {
 function handleLogout() {
   authStore.logout()
   router.push('/login')
+}
+
+function handleUserMenuCommand(cmd: string) {
+  if (cmd === 'profile') {
+    profileDrawerVisible.value = true
+    return
+  }
+  if (cmd === 'logout') {
+    handleLogout()
+  }
+}
+
+function handleImportMenuCommand(cmd: string) {
+  if (cmd === 'import') {
+    importRequirementsVisible.value = true
+    return
+  }
+  if (cmd === 'template') {
+    downloadRequirementsTemplate()
+  }
+}
+
+function tzCellLabel(row: Requirement) {
+  const t = (row.tzPointText || '').trim()
+  if (t) return t
+  const n = (row.nmckPointText || '').trim()
+  if (n) return `НМЦК: ${n}`
+  return ''
+}
+
+function openTzInfo(row: Requirement) {
+  if (!tzCellLabel(row)) return
+  tzInfoRequirementId.value = row.id
+  tzInfoVisible.value = true
+}
+
+async function handleDelete(row: Requirement) {
+  try {
+    await ElMessageBox.confirm(
+      'Удалить запись? Она исчезнет из списков. Это не архив: архивные записи можно фильтром «Только архивные».',
+      'Удаление предложения',
+      {
+        type: 'warning',
+        confirmButtonText: 'Удалить',
+        cancelButtonText: 'Отмена',
+      },
+    )
+  } catch {
+    return
+  }
+  try {
+    await deleteRequirement(row.id)
+    ElMessage.success('Запись удалена')
+    if (selectedRequirementId.value === row.id) {
+      detailsVisible.value = false
+      selectedRequirementId.value = null
+    }
+    await loadData()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка удаления')
+  }
 }
 
 /**
@@ -649,6 +796,26 @@ function handleFloatingScrollbarScroll() {
   })
 }
 
+watch(
+  [status, implementationQueue, archiveFilterMode, filterNoFunction],
+  () => {
+    clearSearchDebounce()
+    loadData()
+  },
+)
+
+watch(systemType, () => {
+  clearSearchDebounce()
+  loadData()
+})
+
+watch(search, () => {
+  clearSearchDebounce()
+  searchDebounceTimer = setTimeout(() => {
+    loadData()
+  }, 400)
+})
+
 /**
  * Инициализация страницы.
  */
@@ -693,8 +860,7 @@ onBeforeUnmount(() => {
   min-height: 100vh;
   width: 100%;
   overflow-x: hidden;
-  background:
-    radial-gradient(circle at top left, #f4f8ff 0%, #f7f9fc 35%, #f3f5f8 100%);
+  background: linear-gradient(165deg, #e8eef6 0%, #f2f5f9 40%, #edf1f7 100%);
   padding: 16px;
   box-sizing: border-box;
 }
@@ -713,7 +879,7 @@ onBeforeUnmount(() => {
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
   min-width: 0;
 }
@@ -734,10 +900,11 @@ onBeforeUnmount(() => {
 
 .page-title {
   margin: 0;
-  font-size: 30px;
-  line-height: 1.1;
+  font-size: 28px;
+  line-height: 1.15;
   font-weight: 700;
-  color: #1f2937;
+  color: #142032;
+  letter-spacing: -0.02em;
 }
 
 .meta {
@@ -750,29 +917,116 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: 6px 10px;
   border-radius: 999px;
-  background: #eaf2ff;
-  color: #315ea8;
+  background: #e2eaf4;
+  color: #1e4d7b;
   font-size: 13px;
   font-weight: 600;
 }
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
   min-width: 0;
 }
 
-.profile-button {
-  border-color: #8fd0aa !important;
-  color: #23754b !important;
-  background: #effcf4 !important;
+.header-before-avatar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.toolbar-left {
+  flex: 1;
+  min-width: 280px;
+  display: grid;
+  gap: 10px;
+}
+
+.toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.reset-filters-btn {
+  flex-shrink: 0;
+}
+
+.filter-no-fn {
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.user-avatar-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid #c5d2e3;
+  background: linear-gradient(145deg, #1e4d7b, #2d6a4f);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(30, 77, 123, 0.25);
+}
+
+.user-avatar-btn:hover {
+  filter: brightness(1.05);
+}
+
+.archive-filter-select {
+  width: 200px;
+  flex: 0 0 200px;
+}
+
+.tz-cell-link {
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  color: #1e4d7b;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.tz-cell-link:hover:not(:disabled) {
+  color: #163a5e;
+}
+
+.tz-cell-link:disabled {
+  color: inherit;
+  text-decoration: none;
+  cursor: default;
 }
 
 .summary-grid-all {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 10px;
   min-width: 0;
 }
@@ -876,14 +1130,24 @@ onBeforeUnmount(() => {
   Внутренний блок с шириной таблицы.
 */
 .table-width-box {
-  width: 2050px;
+  width: 2880px;
 }
 
 /*
   Таблица ровно на ширину колонок.
 */
 .requirements-table {
-  width: 2050px;
+  width: 2880px;
+}
+
+.requirements-table :deep(td.tz-col) {
+  vertical-align: top;
+}
+
+.requirements-table :deep(td.tz-col .cell) {
+  white-space: normal !important;
+  word-break: break-word;
+  line-height: 1.4;
 }
 
 .requirements-table :deep(th.el-table__cell) {
@@ -961,9 +1225,14 @@ onBeforeUnmount(() => {
 
 .row-actions {
   display: flex;
-  gap: 4px;
+  flex-wrap: nowrap;
+  gap: 8px;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 8px;
+  box-sizing: border-box;
 }
 
 @media (max-width: 1365px) {

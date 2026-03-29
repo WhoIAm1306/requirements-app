@@ -23,6 +23,24 @@ func NewRequirementHandler(db *gorm.DB) *RequirementHandler {
 	return &RequirementHandler{db: db}
 }
 
+// applyRequirementTextSearch накладывает текстовый поиск по полям карточки.
+// Условия OR должны быть в скобках: иначе в SQL приоритет AND выше OR, и фильтры
+// (очередь, статус, система и т.д.) перестают сужать совпадения по полям initiator / proposal_text.
+func applyRequirementTextSearch(db *gorm.DB, rawSearch string) *gorm.DB {
+	search := strings.TrimSpace(rawSearch)
+	if search == "" {
+		return db
+	}
+	like := "%" + search + "%"
+	return db.Where(`(
+		task_identifier ILIKE ? OR
+		short_name ILIKE ? OR
+		initiator ILIKE ? OR
+		responsible_person ILIKE ? OR
+		proposal_text ILIKE ?
+	)`, like, like, like, like, like)
+}
+
 type CreateRequirementRequest struct {
 	ShortName           string `json:"shortName"`
 	Initiator           string `json:"initiator"`
@@ -34,9 +52,11 @@ type CreateRequirementRequest struct {
 	ImplementationQueue string `json:"implementationQueue"`
 	NoteText            string `json:"noteText"`
 	TZPointText         string `json:"tzPointText"`
+	NmckPointText       string `json:"nmckPointText"`
 	StatusText          string `json:"statusText"`
 	SystemType          string `json:"systemType"`
 	ContractName        string `json:"contractName"`
+	ContractTZFunctionID *uint  `json:"contractTZFunctionId"`
 }
 
 type UpdateRequirementRequest struct {
@@ -50,9 +70,11 @@ type UpdateRequirementRequest struct {
 	ImplementationQueue string `json:"implementationQueue"`
 	NoteText            string `json:"noteText"`
 	TZPointText         string `json:"tzPointText"`
+	NmckPointText       string `json:"nmckPointText"`
 	StatusText          string `json:"statusText"`
 	SystemType          string `json:"systemType"`
 	ContractName        string `json:"contractName"`
+	ContractTZFunctionID *uint  `json:"contractTZFunctionId"`
 }
 
 type AddCommentRequest struct {
@@ -127,8 +149,11 @@ func (h *RequirementHandler) List(c *gin.Context) {
 
 	query := h.db.Order("id desc")
 
-	includeArchived := strings.TrimSpace(c.Query("includeArchived"))
-	if includeArchived != "true" {
+	archivedOnly := strings.TrimSpace(c.Query("archivedOnly")) == "true"
+	includeArchivedParam := strings.TrimSpace(c.Query("includeArchived")) == "true"
+	if archivedOnly {
+		query = query.Where("is_archived = ?", true)
+	} else if !includeArchivedParam {
 		query = query.Where("is_archived = ?", false)
 	}
 
@@ -147,16 +172,10 @@ func (h *RequirementHandler) List(c *gin.Context) {
 		query = query.Where("implementation_queue = ?", queue)
 	}
 
-	search := strings.TrimSpace(c.Query("search"))
-	if search != "" {
-		like := "%" + search + "%"
-		query = query.Where(`
-			task_identifier ILIKE ? OR
-			short_name ILIKE ? OR
-			initiator ILIKE ? OR
-			responsible_person ILIKE ? OR
-			proposal_text ILIKE ?
-		`, like, like, like, like, like)
+	query = applyRequirementTextSearch(query, c.Query("search"))
+
+	if strings.TrimSpace(c.Query("noFunction")) == "true" {
+		query = query.Where("contract_tz_function_id IS NULL")
 	}
 
 	if err := query.Find(&items).Error; err != nil {
@@ -194,6 +213,27 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// Если пользователь выбрал функцию ТЗ — формируем Пункт ТЗ из неё.
+	var selectedFunction *models.ContractTZFunction
+	if req.ContractTZFunctionID != nil {
+		var contract models.ContractDictionary
+		if err := h.db.Where("LOWER(name) = LOWER(?)", contractName).First(&contract).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения ГК"})
+			return
+		}
+
+		var fn models.ContractTZFunction
+		if err := h.db.First(&fn, *req.ContractTZFunctionID).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректная выбранная функция ТЗ"})
+			return
+		}
+		if fn.ContractID != contract.ID {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Функция ТЗ не принадлежит выбранной ГК"})
+			return
+		}
+		selectedFunction = &fn
+	}
+
 	userName := c.GetString("userName")
 	userOrg := c.GetString("userOrg")
 
@@ -212,7 +252,7 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 	}
 
 	if strings.TrimSpace(req.StatusText) == "" {
-		req.StatusText = "Новое"
+		req.StatusText = "В обработку"
 	}
 
 	taskIdentifier, err := h.generateTaskIdentifier(strings.TrimSpace(req.ImplementationQueue), 0)
@@ -233,6 +273,7 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		ImplementationQueue: strings.TrimSpace(req.ImplementationQueue),
 		NoteText:            strings.TrimSpace(req.NoteText),
 		TZPointText:         strings.TrimSpace(req.TZPointText),
+		NmckPointText:       strings.TrimSpace(req.NmckPointText),
 		StatusText:          strings.TrimSpace(req.StatusText),
 		SystemType:          strings.TrimSpace(req.SystemType),
 		AuthorName:          userName,
@@ -240,6 +281,13 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		LastEditedBy:        userName,
 		LastEditedOrg:       userOrg,
 		ContractName:        contractName,
+		ContractTZFunctionID: req.ContractTZFunctionID,
+	}
+
+	// П.п. ТЗ и НМЦК из выбранной функции справочника.
+	if selectedFunction != nil {
+		item.TZPointText = fmt.Sprintf("%s — %s", strings.TrimSpace(selectedFunction.TZSectionNumber), strings.TrimSpace(selectedFunction.FunctionName))
+		item.NmckPointText = strings.TrimSpace(selectedFunction.NMCKFunctionNumber)
 	}
 
 	if err := h.db.Create(&item).Error; err != nil {
@@ -253,14 +301,14 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 func (h *RequirementHandler) Update(c *gin.Context) {
 	var req UpdateRequirementRequest
 
-	contractName := strings.TrimSpace(req.ContractName)
-	if err := h.ensureContractExists(contractName); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка сохранения ГК"})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный запрос"})
 		return
 	}
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный запрос"})
+	contractName := strings.TrimSpace(req.ContractName)
+	if err := h.ensureContractExists(contractName); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка сохранения ГК"})
 		return
 	}
 
@@ -311,11 +359,36 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 	item.DiscussionSummary = strings.TrimSpace(req.DiscussionSummary)
 	item.ImplementationQueue = newQueue
 	item.NoteText = strings.TrimSpace(req.NoteText)
-	item.TZPointText = strings.TrimSpace(req.TZPointText)
+	// Выбор функции ТЗ переопределяет Пункт ТЗ.
+	if req.ContractTZFunctionID != nil {
+		var contract models.ContractDictionary
+		if err := h.db.Where("LOWER(name) = LOWER(?)", contractName).First(&contract).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения ГК"})
+			return
+		}
+
+		var fn models.ContractTZFunction
+		if err := h.db.First(&fn, *req.ContractTZFunctionID).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректная выбранная функция ТЗ"})
+			return
+		}
+		if fn.ContractID != contract.ID {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Функция ТЗ не принадлежит выбранной ГК"})
+			return
+		}
+
+		item.ContractTZFunctionID = req.ContractTZFunctionID
+		item.TZPointText = fmt.Sprintf("%s — %s", strings.TrimSpace(fn.TZSectionNumber), strings.TrimSpace(fn.FunctionName))
+		item.NmckPointText = strings.TrimSpace(fn.NMCKFunctionNumber)
+	} else {
+		item.ContractTZFunctionID = nil
+		item.TZPointText = strings.TrimSpace(req.TZPointText)
+		item.NmckPointText = strings.TrimSpace(req.NmckPointText)
+	}
 	item.SystemType = strings.TrimSpace(req.SystemType)
 
 	if strings.TrimSpace(req.StatusText) == "" {
-		item.StatusText = "Новое"
+		item.StatusText = "В обработку"
 	} else {
 		item.StatusText = strings.TrimSpace(req.StatusText)
 	}
@@ -544,7 +617,7 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 
 		statusText := getCellByHeader(row, headerMap, "Статус")
 		if statusText == "" {
-			statusText = "Новое"
+			statusText = "В обработку"
 		}
 
 		systemType := getCellByHeader(row, headerMap, "Система")
@@ -570,7 +643,16 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 			DiscussionSummary:   getCellByHeader(row, headerMap, "Обсуждение"),
 			ImplementationQueue: normalizedQueue,
 			NoteText:            getCellByHeader(row, headerMap, "Примечание"),
-			TZPointText:         getCellByHeader(row, headerMap, "Пункт ТЗ"),
+			TZPointText: getCellByHeader(row, headerMap,
+				"П.п. ТЗ",
+				"п.п. тз",
+				"Пункт ТЗ",
+			),
+			NmckPointText: getCellByHeader(row, headerMap,
+				"П.п. НМЦК",
+				"п.п. нмцк",
+				"Пункт НМЦК",
+			),
 			StatusText:          statusText,
 			SystemType:          systemType,
 			AuthorName:          userName,
@@ -597,6 +679,14 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 
 	query := h.db.Order("id desc")
 
+	archivedOnly := strings.TrimSpace(c.Query("archivedOnly")) == "true"
+	includeArchivedParam := strings.TrimSpace(c.Query("includeArchived")) == "true"
+	if archivedOnly {
+		query = query.Where("is_archived = ?", true)
+	} else if !includeArchivedParam {
+		query = query.Where("is_archived = ?", false)
+	}
+
 	systemType := strings.TrimSpace(c.Query("systemType"))
 	if systemType != "" {
 		query = query.Where("system_type = ?", systemType)
@@ -612,16 +702,10 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 		query = query.Where("implementation_queue = ?", queue)
 	}
 
-	search := strings.TrimSpace(c.Query("search"))
-	if search != "" {
-		like := "%" + search + "%"
-		query = query.Where(`
-			task_identifier ILIKE ? OR
-			short_name ILIKE ? OR
-			initiator ILIKE ? OR
-			responsible_person ILIKE ? OR
-			proposal_text ILIKE ?
-		`, like, like, like, like, like)
+	query = applyRequirementTextSearch(query, c.Query("search"))
+
+	if strings.TrimSpace(c.Query("noFunction")) == "true" {
+		query = query.Where("contract_tz_function_id IS NULL")
 	}
 
 	if err := query.Find(&items).Error; err != nil {
@@ -647,7 +731,8 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 		"Номер очереди при реализации",
 		"Примечание",
 		"ГК",
-		"Пункт ТЗ",
+		"П.п. ТЗ",
+		"П.п. НМЦК",
 		"Статус",
 		"Система",
 		"Автор создания",
@@ -679,6 +764,7 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 			item.NoteText,
 			item.ContractName,
 			item.TZPointText,
+			item.NmckPointText,
 			item.StatusText,
 			item.SystemType,
 			item.AuthorName,
@@ -766,6 +852,84 @@ func (h *RequirementHandler) Restore(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, item)
+}
+
+// DELETE /api/requirements/:id — мягкое удаление (не путать с архивом).
+func (h *RequirementHandler) Delete(c *gin.Context) {
+	var item models.Requirement
+	if err := h.db.First(&item, c.Param("id")).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Предложение не найдено"})
+		return
+	}
+
+	if err := h.db.Delete(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка удаления предложения"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Предложение удалено"})
+}
+
+// GET /api/requirements/:id/gk-link — сведения о привязке к функции справочника ГК.
+func (h *RequirementHandler) GetGKLink(c *gin.Context) {
+	var reqItem models.Requirement
+	if err := h.db.First(&reqItem, c.Param("id")).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Предложение не найдено"})
+		return
+	}
+
+	type dto struct {
+		HasFunction         bool   `json:"hasFunction"`
+		ContractID          uint   `json:"contractId"`
+		FunctionID          uint   `json:"functionId"`
+		ContractStageID     uint   `json:"contractStageId"`
+		ContractName        string `json:"contractName"`
+		StageNumber         int    `json:"stageNumber"`
+		StageName           string `json:"stageName"`
+		FunctionName        string `json:"functionName"`
+		TZSectionNumber     string `json:"tzSectionNumber"`
+		NmckFunctionNumber  string `json:"nmckFunctionNumber"`
+		JiraLink            string `json:"jiraLink"`
+		TZPointText         string `json:"tzPointText"`
+		NmckPointText       string `json:"nmckPointText"`
+	}
+
+	out := dto{
+		ContractName:  strings.TrimSpace(reqItem.ContractName),
+		TZPointText:   strings.TrimSpace(reqItem.TZPointText),
+		NmckPointText: strings.TrimSpace(reqItem.NmckPointText),
+	}
+
+	if reqItem.ContractTZFunctionID == nil {
+		c.JSON(http.StatusOK, out)
+		return
+	}
+
+	var fn models.ContractTZFunction
+	if err := h.db.First(&fn, *reqItem.ContractTZFunctionID).Error; err != nil {
+		c.JSON(http.StatusOK, out)
+		return
+	}
+
+	var stage models.ContractStage
+	_ = h.db.First(&stage, fn.ContractStageID).Error
+
+	var contract models.ContractDictionary
+	_ = h.db.First(&contract, fn.ContractID).Error
+
+	out.HasFunction = true
+	out.ContractID = fn.ContractID
+	out.FunctionID = fn.ID
+	out.ContractStageID = fn.ContractStageID
+	out.ContractName = contract.Name
+	out.StageNumber = stage.StageNumber
+	out.StageName = stage.StageName
+	out.FunctionName = fn.FunctionName
+	out.TZSectionNumber = fn.TZSectionNumber
+	out.NmckFunctionNumber = fn.NMCKFunctionNumber
+	out.JiraLink = strings.TrimSpace(fn.JiraLink)
+
+	c.JSON(http.StatusOK, out)
 }
 
 func (h *RequirementHandler) ensureContractExists(contractName string) error {

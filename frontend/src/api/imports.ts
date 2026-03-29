@@ -32,3 +32,19 @@ export async function importTZPointsFile(file: File) {
 
   return data
 }
+
+export async function importGKFunctionsFile(file: File, contractId?: number) {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (contractId) {
+    formData.append('contractId', String(contractId))
+  }
+
+  const { data } = await apiClient.post<ImportResult>('/import/gk-tz-functions', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  })
+
+  return data
+}
