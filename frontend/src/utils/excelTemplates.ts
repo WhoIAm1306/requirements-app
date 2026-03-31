@@ -55,7 +55,25 @@ export function downloadRequirementsTemplate() {
     '112',
   ]
 
-  const rows = [Array.from(REQUIREMENTS_HEADERS), example1, example2]
+  const example3 = [
+    '',
+    'Пример: колонка «Система» — telephony (Телефония в интерфейсе)',
+    '',
+    'Иванов И.И.',
+    '',
+    'Текст',
+    '',
+    '',
+    '1 очередь',
+    '',
+    '',
+    '',
+    '',
+    'Новое',
+    'telephony',
+  ]
+
+  const rows = [Array.from(REQUIREMENTS_HEADERS), example1, example2, example3]
 
   const worksheet = XLSX.utils.aoa_to_sheet(rows)
   const workbook = XLSX.utils.book_new()

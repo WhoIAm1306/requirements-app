@@ -21,8 +21,12 @@
         <el-col :span="12">
           <el-form-item label="Система">
             <el-select v-model="form.systemType" style="width: 100%" @change="onSystemTypeChange">
-              <el-option label="Система 112" value="112" />
-              <el-option label="Система 101" value="101" />
+              <el-option
+                v-for="opt in SYSTEM_TYPE_OPTIONS"
+                :key="opt.value"
+                :label="opt.label"
+                :value="opt.value"
+              />
             </el-select>
           </el-form-item>
         </el-col>
@@ -208,6 +212,7 @@ import {
   DEFAULT_REQUIREMENT_STATUS,
   STANDARD_REQUIREMENT_STATUSES,
 } from '@/constants/requirementStatuses'
+import { SYSTEM_TYPE_OPTIONS } from '@/constants/systemTypes'
 import { initiatorForSystemType } from '@/constants/initiatorBySystem'
 
 const props = defineProps<{

@@ -95,6 +95,13 @@
           <div class="toolbar-left">
             <div class="main-filters">
               <el-button
+                :type="systemType === 'telephony' ? 'primary' : 'default'"
+                @click="setSystem('telephony')"
+              >
+                Телефония
+              </el-button>
+
+              <el-button
                 :type="systemType === '112' ? 'primary' : 'default'"
                 @click="setSystem('112')"
               >
@@ -279,7 +286,11 @@
                 </template>
               </el-table-column>
 
-              <el-table-column prop="systemType" label="Система" width="100" />
+              <el-table-column label="Система" width="130">
+                <template #default="{ row }">
+                  {{ systemTypeLabel(row.systemType) }}
+                </template>
+              </el-table-column>
 
               <el-table-column label="Предложение" width="400">
                 <template #default="{ row }">
@@ -416,6 +427,7 @@ import {
   STANDARD_REQUIREMENT_STATUSES,
   isStandardRequirementStatus,
 } from '@/constants/requirementStatuses'
+import { systemTypeLabel } from '@/constants/systemTypes'
 import type { QueueItem, Requirement } from '@/types'
 
 /**
@@ -473,7 +485,7 @@ const floatingScrollbarRef = ref<HTMLElement | null>(null)
  * Ширина таблицы = сумма ширин колонок.
  */
 /** Сумма фиксированных ширин колонок (table-layout: fixed). */
-const tableWidth = 2750
+const tableWidth = 2780
 
 const filterNoFunction = ref(false)
 

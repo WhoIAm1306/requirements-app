@@ -143,8 +143,12 @@
               <el-col :span="12">
                 <el-form-item label="Система">
                   <el-select v-model="form.systemType" style="width: 100%" @change="onSystemTypeChange">
-                    <el-option label="112" value="112" />
-                    <el-option label="101" value="101" />
+                    <el-option
+                      v-for="opt in SYSTEM_TYPE_OPTIONS"
+                      :key="opt.value"
+                      :label="opt.label"
+                      :value="opt.value"
+                    />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -284,7 +288,7 @@
 
             <div class="readonly-card">
               <div class="readonly-label">Система</div>
-              <div class="readonly-value">{{ item.systemType || '—' }}</div>
+              <div class="readonly-value">{{ systemTypeLabel(item.systemType) }}</div>
             </div>
 
             <div class="readonly-card full">
@@ -384,6 +388,7 @@ import {
 import type { ContractItem, GKFunction, GKStage, QueueItem, Requirement, RequirementPayload } from '@/types'
 import { STANDARD_REQUIREMENT_STATUSES } from '@/constants/requirementStatuses'
 import { initiatorForSystemType } from '@/constants/initiatorBySystem'
+import { SYSTEM_TYPE_OPTIONS, systemTypeLabel } from '@/constants/systemTypes'
 
 /**
  * Props drawer.

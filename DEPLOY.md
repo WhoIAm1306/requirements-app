@@ -211,6 +211,115 @@ server {
 
 ---
 
+## Миграция на другой сервер без потери данных (Docker Compose)
+
+Сценарий: текущая инсталляция работает на одном сервере (например, VPS у Selectel), данных много, и нужно перенести на новый сервер, не потеряв содержимое БД и загруженные вложения ГК.
+
+Процедура ниже рассчитана на случай, когда используется **Docker Compose** (как в этом доке) и применяется **named volumes** `pgdata` и `uploads`.
+
+### 1. Подготовка нового сервера
+
+1. Установите Docker + Compose (см. “Вариант 1”).
+2. Скопируйте репозиторий на новый сервер.
+3. Создайте `.env` из `deploy.env.example` и задайте:
+   - `DB_PASSWORD` (а также при необходимости `DB_HOST/DB_USER/DB_NAME`, если вы меняете их в compose),
+   - `JWT_SECRET` (рекомендуется перенести тот же, чтобы не разлогинивать пользователей),
+   - `SUPERUSER_PASSWORD` (можно любой; если вы восстановите БД — пользователи будут “как были”),
+   - `FRONTEND_ORIGIN` (должен соответствовать URL на новом сервере для CORS).
+4. Убедитесь, что на новом сервере нет запущенных контейнеров старого приложения.
+
+### 2. Минимизируйте простой на исходном сервере
+
+Чтобы дамп точно соответствовал последнему состоянию, перед экспортом остановите backend:
+
+```bash
+docker compose stop app
+```
+
+Дамп снимайте, пока `db` остаётся запущенной.
+
+### 3. Экспорт PostgreSQL (pg_dump)
+
+На исходном сервере:
+
+```bash
+mkdir -p /tmp/requirements-migration
+
+docker compose exec -T db \
+  pg_dump -U "$DB_USER" -d "$DB_NAME" --format=custom \
+  > /tmp/requirements-migration/pg.dump
+```
+
+Если `DB_USER/DB_NAME` не экспортированы в shell — используйте значения из `.env`.
+
+### 4. Экспорт вложений `uploads`
+
+На исходном сервере:
+
+```bash
+docker compose exec -T app \
+  tar czf - -C /app/uploads . > /tmp/requirements-migration/uploads.tar.gz
+```
+
+### 5. Перенос файлов на новый сервер
+
+Перенесите на новый сервер:
+- `/tmp/requirements-migration/pg.dump`
+- `/tmp/requirements-migration/uploads.tar.gz`
+
+любым удобным способом (`scp`, `rsync` и т.п.).
+
+### 6. Подготовка БД на новом сервере
+
+На новом сервере:
+
+```bash
+docker compose down -v
+docker compose up -d db
+```
+
+Это удалит ранее созданные named volumes и гарантирует, что восстановление не “смешается” со старыми данными.
+
+### 7. Восстановление PostgreSQL (pg_restore)
+
+На новом сервере:
+
+```bash
+docker compose exec -T db \
+  pg_restore -U "$DB_USER" -d "$DB_NAME" --no-owner --clean --if-exists \
+  < /tmp/requirements-migration/pg.dump
+```
+
+### 8. Восстановление вложений `uploads`
+
+```bash
+# очистить содержимое в volume
+docker compose exec -T app sh -c "cd /app/uploads && rm -rf ./*"
+
+# восстановить из архива
+docker compose exec -T app sh -c "cd /app/uploads && tar xzf -" \
+  < /tmp/requirements-migration/uploads.tar.gz
+```
+
+### 9. Запуск приложения и проверка
+
+```bash
+docker compose up -d
+curl -s http://127.0.0.1:8080/api/health
+```
+
+Проверьте в интерфейсе:
+- несколько карточек предложений,
+- корректность статусов,
+- наличие прикреплённых файлов ГК (вложения).
+
+### 10. Минимизация рисков
+
+- Делайте “заморозку” (останавливайте `app`) перед `pg_dump`, чтобы не было расхождений.
+- Для идеальной “без простоя” миграции обычно требуется более сложный механизм (в стиле log shipping/replication). В рамках текущей docker-архитектуры самый надёжный вариант без потерь — остановка `app`, дамп и restore.
+
+---
+
 ## Устранение неполадок
 
 | Симптом | Что проверить |
