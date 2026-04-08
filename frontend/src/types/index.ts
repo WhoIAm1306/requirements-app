@@ -154,6 +154,26 @@ export interface ContractAttachmentItem {
   createdAt: string
 }
 
+/** Метаданные файла в общей библиотеке вложений предложений. */
+export interface RequirementAttachmentLibraryItem {
+  id: number
+  originalFileName: string
+  contentType: string
+  uploadedByName: string
+  uploadedByOrg: string
+  createdAt: string
+  lastUsedAt: string
+}
+
+/** Вложение карточки предложения (ссылка на запись библиотеки). */
+export interface RequirementAttachmentItem {
+  id: number
+  requirementId: number
+  libraryFileId: number
+  createdAt: string
+  libraryFile?: RequirementAttachmentLibraryItem
+}
+
 // Комментарий предложения.
 export interface CommentItem {
   id: number
@@ -197,6 +217,7 @@ export interface Requirement {
   archivedBy?: string
   archivedByOrg?: string
   comments?: CommentItem[]
+  attachments?: RequirementAttachmentItem[]
 }
 
 // Payload для создания/обновления предложения.

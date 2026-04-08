@@ -17,6 +17,12 @@
             <div class="meta-line"><span class="meta-label">Автор:</span> {{ item.authorName }}</div>
             <div class="meta-line"><span class="meta-label">Организация автора:</span> {{ item.authorOrg }}</div>
             <div class="meta-line"><span class="meta-label">Создано:</span> {{ formatDateTime(item.createdAt) }}</div>
+            <div class="meta-line">
+              <span class="meta-label">Последние изменения внес:</span>
+              {{ item.lastEditedBy || '—' }}
+              — {{ item.lastEditedOrg || '—' }}
+              — {{ formatDateTime(item.updatedAt) }}
+            </div>
           </div>
 
           <div v-if="canEdit" class="top-actions">
@@ -208,7 +214,7 @@
                         @change="handleFunctionSelected"
                       >
                         <el-option
-                          v-for="fn in sortedFunctions"
+                          v-for="fn in functions"
                           :key="fn.id"
                           :label="nmckFunctionOptionLabel(fn)"
                           :value="fn.id"
@@ -238,7 +244,11 @@
 
               <el-col :span="12">
                 <el-form-item label="Примечание">
-                  <el-input v-model="form.noteText" />
+                  <el-input
+                    v-model="form.noteText"
+                    type="textarea"
+                    :autosize="{ minRows: 3, maxRows: 12 }"
+                  />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -328,6 +338,81 @@
           </div>
         </template>
 
+        <el-divider content-position="left">Вложения</el-divider>
+
+        <div class="attachments-block">
+          <el-empty
+            v-if="!item.attachments?.length"
+            description="Файлов пока нет"
+            :image-size="72"
+          />
+
+          <div v-else class="attachments-list">
+            <div v-for="att in item.attachments" :key="att.id" class="attachment-row">
+              <span class="attachment-name">{{
+                att.libraryFile?.originalFileName || 'Файл'
+              }}</span>
+              <span class="attachment-meta">{{ formatDateTime(att.createdAt) }}</span>
+              <el-button size="small" @click="downloadAttachment(att)">Скачать</el-button>
+              <el-button
+                v-if="canEdit"
+                size="small"
+                type="danger"
+                link
+                :loading="detachLoadingId === att.id"
+                @click="confirmDetachAttachment(att)"
+              >
+                Открепить
+              </el-button>
+            </div>
+          </div>
+
+          <template v-if="canEdit">
+            <div class="attachments-toolbar">
+              <input
+                ref="reqFileInputRef"
+                type="file"
+                multiple
+                class="visually-hidden"
+                accept=".docx,.xls,.xlsx,.xlsm,.doc,.pdf"
+                @change="onReqAttachmentFilesPicked"
+              />
+              <el-button :loading="attachmentsUploading" @click="triggerReqAttachmentFilePick">
+                Загрузить файлы
+              </el-button>
+              <span class="attachments-hint">
+                Допустимые форматы: doc, docx, pdf, xls, xlsx, xlsm. Загруженные файлы сохраняются в общую
+                библиотеку — их можно снова прикрепить к другим предложениям.
+              </span>
+            </div>
+
+            <div class="library-attach-block">
+              <div class="library-attach-label">Ранее используемые файлы</div>
+              <el-select
+                v-model="libraryPickValue"
+                filterable
+                remote
+                clearable
+                reserve-keyword
+                placeholder="Поиск по имени файла — прикрепить без повторной загрузки"
+                :remote-method="searchRequirementLibraryRemote"
+                :loading="libraryLoading"
+                style="width: 100%"
+                @visible-change="onRequirementLibraryDropdownVisible"
+                @change="onRequirementLibraryPicked"
+              >
+                <el-option
+                  v-for="opt in libraryOptions"
+                  :key="opt.id"
+                  :label="requirementLibraryOptionLabel(opt)"
+                  :value="opt.id"
+                  :disabled="isLibraryFileAlreadyAttached(opt.id)"
+                />
+              </el-select>
+            </div>
+          </template>
+        </div>
+
         <el-divider />
 
         <!-- Комментарии -->
@@ -373,7 +458,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { fetchQueues } from '@/api/queues'
 import { fetchContracts } from '@/api/contracts'
@@ -381,11 +466,25 @@ import { fetchGKContractDetails, fetchGKFunctionsForStage, fetchGKStages } from 
 import {
   addRequirementComment,
   archiveRequirement,
+  attachRequirementFromLibrary,
+  deleteRequirementAttachment,
+  downloadRequirementAttachment,
+  fetchRequirementAttachmentLibrary,
   fetchRequirementById,
   restoreRequirement,
   updateRequirement,
+  uploadRequirementAttachments,
 } from '@/api/requirements'
-import type { ContractItem, GKFunction, GKStage, QueueItem, Requirement, RequirementPayload } from '@/types'
+import type {
+  ContractItem,
+  GKFunction,
+  GKStage,
+  QueueItem,
+  Requirement,
+  RequirementAttachmentItem,
+  RequirementAttachmentLibraryItem,
+  RequirementPayload,
+} from '@/types'
 import { STANDARD_REQUIREMENT_STATUSES } from '@/constants/requirementStatuses'
 import { initiatorForSystemType } from '@/constants/initiatorBySystem'
 import { SYSTEM_TYPE_OPTIONS, systemTypeLabel } from '@/constants/systemTypes'
@@ -485,16 +584,6 @@ const contractSelectOptions = computed(() => {
   const exists = list.some((c) => (c.name || '').trim().toLowerCase() === cur.toLowerCase())
   if (exists) return list
   return [{ id: -1, name: cur }, ...list]
-})
-
-const sortedFunctions = computed(() => {
-  return [...functions.value].sort((a, b) => {
-    const cmp = (a.nmckFunctionNumber || '').localeCompare(b.nmckFunctionNumber || '', undefined, {
-      numeric: true,
-    })
-    if (cmp !== 0) return cmp
-    return (a.functionName || '').localeCompare(b.functionName || '', undefined, { sensitivity: 'base' })
-  })
 })
 
 function nmckFunctionOptionLabel(fn: GKFunction) {
@@ -717,6 +806,129 @@ async function handleRestore() {
 /**
  * Добавляем комментарий.
  */
+const reqFileInputRef = ref<HTMLInputElement | null>(null)
+const attachmentsUploading = ref(false)
+const detachLoadingId = ref<number | null>(null)
+const libraryOptions = ref<RequirementAttachmentLibraryItem[]>([])
+const libraryLoading = ref(false)
+const libraryPickValue = ref<number | null>(null)
+
+function triggerReqAttachmentFilePick() {
+  reqFileInputRef.value?.click()
+}
+
+async function onReqAttachmentFilesPicked(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = input.files ? Array.from(input.files) : []
+  if (!files.length || !item.value) return
+
+  try {
+    attachmentsUploading.value = true
+    await uploadRequirementAttachments(item.value.id, files)
+    ElMessage.success('Файлы добавлены')
+    input.value = ''
+    await loadItem()
+    emit('updated')
+    await searchRequirementLibraryRemote('')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка загрузки файлов')
+  } finally {
+    attachmentsUploading.value = false
+  }
+}
+
+function isLibraryFileAlreadyAttached(libraryFileId: number) {
+  return !!item.value?.attachments?.some((a) => a.libraryFileId === libraryFileId)
+}
+
+function requirementLibraryOptionLabel(row: RequirementAttachmentLibraryItem) {
+  const who = [row.uploadedByName, row.uploadedByOrg].filter(Boolean).join(' · ')
+  const used = row.lastUsedAt ? formatDateTime(row.lastUsedAt) : ''
+  const tail = [who && `(${who})`, used && `исп. ${used}`].filter(Boolean).join(' ')
+  return tail ? `${row.originalFileName} ${tail}` : row.originalFileName
+}
+
+async function searchRequirementLibraryRemote(q: string) {
+  libraryLoading.value = true
+  try {
+    libraryOptions.value = await fetchRequirementAttachmentLibrary(q)
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка загрузки списка файлов')
+    libraryOptions.value = []
+  } finally {
+    libraryLoading.value = false
+  }
+}
+
+function onRequirementLibraryDropdownVisible(visible: boolean) {
+  if (visible && !libraryOptions.value.length) {
+    searchRequirementLibraryRemote('')
+  }
+}
+
+async function onRequirementLibraryPicked(id: number | null) {
+  if (id == null || !item.value) return
+  if (isLibraryFileAlreadyAttached(id)) {
+    libraryPickValue.value = null
+    ElMessage.warning('Этот файл уже прикреплён')
+    return
+  }
+
+  try {
+    await attachRequirementFromLibrary(item.value.id, id)
+    ElMessage.success('Файл прикреплён')
+    libraryPickValue.value = null
+    await loadItem()
+    emit('updated')
+    await searchRequirementLibraryRemote('')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Не удалось прикрепить файл')
+    libraryPickValue.value = null
+  }
+}
+
+async function downloadAttachment(att: RequirementAttachmentItem) {
+  try {
+    const response = await downloadRequirementAttachment(att.id)
+    const blob = response.data as Blob
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = att.libraryFile?.originalFileName || 'download'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка скачивания')
+  }
+}
+
+async function confirmDetachAttachment(att: RequirementAttachmentItem) {
+  const name = att.libraryFile?.originalFileName || 'файл'
+  try {
+    await ElMessageBox.confirm(
+      `Открепить «${name}» от этого предложения? Запись в библиотеке сохранится — файл можно прикрепить снова.`,
+      'Открепление файла',
+      { type: 'warning', confirmButtonText: 'Открепить', cancelButtonText: 'Отмена' },
+    )
+  } catch {
+    return
+  }
+
+  try {
+    detachLoadingId.value = att.id
+    await deleteRequirementAttachment(att.id)
+    ElMessage.success('Файл откреплён')
+    await loadItem()
+    emit('updated')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка открепления')
+  } finally {
+    detachLoadingId.value = null
+  }
+}
+
 async function handleAddComment() {
   if (!item.value) return
   if (!newCommentText.value.trim()) {
@@ -754,6 +966,8 @@ watch(
   async ([opened, id]) => {
     if (!opened || !id) return
 
+    libraryOptions.value = []
+    libraryPickValue.value = null
     await loadQueues()
     await loadItem()
   },
@@ -887,6 +1101,73 @@ watch(
 .comment-editor-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.attachments-block {
+  display: grid;
+  gap: 14px;
+}
+
+.attachments-list {
+  display: grid;
+  gap: 10px;
+}
+
+.attachment-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 10px 14px;
+  border: 1px solid #e7ecf3;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.attachment-name {
+  flex: 1 1 180px;
+  font-weight: 600;
+  color: #1f2937;
+  word-break: break-word;
+}
+
+.attachment-meta {
+  font-size: 13px;
+  color: #667085;
+}
+
+.attachments-toolbar {
+  display: grid;
+  gap: 8px;
+}
+
+.attachments-hint {
+  font-size: 12px;
+  color: #667085;
+  line-height: 1.45;
+}
+
+.library-attach-block {
+  display: grid;
+  gap: 8px;
+}
+
+.library-attach-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #344054;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .select-empty {

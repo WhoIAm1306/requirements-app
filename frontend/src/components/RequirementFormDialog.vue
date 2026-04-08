@@ -161,7 +161,7 @@
               @change="handleFunctionSelected"
             >
               <el-option
-                v-for="fn in sortedFunctions"
+                v-for="fn in functions"
                 :key="fn.id"
                 :label="nmckFunctionOptionLabel(fn)"
                 :value="fn.id"
@@ -188,7 +188,11 @@
       </el-row>
 
       <el-form-item label="Примечание">
-        <el-input v-model="form.noteText" type="textarea" :rows="3" />
+        <el-input
+          v-model="form.noteText"
+          type="textarea"
+          :autosize="{ minRows: 3, maxRows: 12 }"
+        />
       </el-form-item>
     </el-form>
 
@@ -263,17 +267,6 @@ const contractSelectOptions = computed(() => {
   const exists = list.some((c) => (c.name || '').trim().toLowerCase() === cur.toLowerCase())
   if (exists) return list
   return [{ id: -1, name: cur }, ...list]
-})
-
-/** Функции этапа в списке по номеру НМЦК для выбора «п.п. НМЦК — функция». */
-const sortedFunctions = computed(() => {
-  return [...functions.value].sort((a, b) => {
-    const cmp = (a.nmckFunctionNumber || '').localeCompare(b.nmckFunctionNumber || '', undefined, {
-      numeric: true,
-    })
-    if (cmp !== 0) return cmp
-    return (a.functionName || '').localeCompare(b.functionName || '', undefined, { sensitivity: 'base' })
-  })
 })
 
 function nmckFunctionOptionLabel(fn: GKFunction) {

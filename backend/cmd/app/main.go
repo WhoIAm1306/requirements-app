@@ -79,6 +79,8 @@ func main() {
 		read.POST("/auth/change-password", authHandler.ChangePassword)
 
 		read.GET("/requirements", requirementHandler.List)
+		read.GET("/requirements/attachment-library", requirementHandler.ListRequirementAttachmentLibrary)
+		read.GET("/requirements/attachments/:attachmentId/download", requirementHandler.DownloadRequirementAttachment)
 		read.GET("/requirements/:id", requirementHandler.GetByID)
 		read.GET("/requirements/:id/gk-link", requirementHandler.GetGKLink)
 		read.GET("/export/requirements", requirementHandler.ExportRequirements)
@@ -102,6 +104,9 @@ func main() {
 		edit.POST("/requirements", requirementHandler.Create)
 		edit.PUT("/requirements/:id", requirementHandler.Update)
 		edit.DELETE("/requirements/:id", requirementHandler.Delete)
+		edit.POST("/requirements/:id/attachments/from-library", requirementHandler.AttachRequirementFromLibrary)
+		edit.POST("/requirements/:id/attachments", requirementHandler.UploadRequirementAttachments)
+		edit.DELETE("/requirements/attachments/:attachmentId", requirementHandler.DeleteRequirementAttachment)
 		edit.POST("/requirements/:id/comments", requirementHandler.AddComment)
 		edit.POST("/requirements/:id/archive", requirementHandler.Archive)
 		edit.POST("/requirements/:id/restore", requirementHandler.Restore)

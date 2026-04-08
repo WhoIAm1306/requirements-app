@@ -24,22 +24,45 @@ func NewRequirementHandler(db *gorm.DB) *RequirementHandler {
 	return &RequirementHandler{db: db}
 }
 
-// applyRequirementTextSearch накладывает текстовый поиск по полям карточки.
-// Условия OR должны быть в скобках: иначе в SQL приоритет AND выше OR, и фильтры
-// (очередь, статус, система и т.д.) перестают сужать совпадения по полям initiator / proposal_text.
+// applyRequirementTextSearch накладывает текстовый поиск по полям карточки (кроме отдельных фильтров
+// статус / очередь / архив в запросе остаются AND — поиск добавляет OR-группу в скобках).
 func applyRequirementTextSearch(db *gorm.DB, rawSearch string) *gorm.DB {
 	search := strings.TrimSpace(rawSearch)
 	if search == "" {
 		return db
 	}
 	like := "%" + search + "%"
-	return db.Where(`(
-		task_identifier ILIKE ? OR
-		short_name ILIKE ? OR
-		initiator ILIKE ? OR
-		responsible_person ILIKE ? OR
-		proposal_text ILIKE ?
-	)`, like, like, like, like, like)
+	fields := []string{
+		"task_identifier",
+		"short_name",
+		"initiator",
+		"responsible_person",
+		"proposal_text",
+		"section_name",
+		"problem_comment",
+		"discussion_summary",
+		"note_text",
+		"contract_name",
+		"tz_point_text",
+		"nmck_point_text",
+		"status_text",
+		"system_type",
+		"implementation_queue",
+		"author_name",
+		"author_org",
+		"last_edited_by",
+		"last_edited_org",
+		"archived_by",
+		"archived_by_org",
+	}
+	parts := make([]string, 0, len(fields))
+	args := make([]interface{}, 0, len(fields))
+	for _, f := range fields {
+		parts = append(parts, f+" ILIKE ?")
+		args = append(args, like)
+	}
+	sql := "(" + strings.Join(parts, " OR ") + ")"
+	return db.Where(sql, args...)
 }
 
 type CreateRequirementRequest struct {
@@ -108,6 +131,14 @@ func extractQueueNumber(value string) (int, error) {
 	return num, nil
 }
 
+func normalizeRequirementSystemType(s string) string {
+	s = strings.TrimSpace(s)
+	if strings.EqualFold(s, "telephony") {
+		return "Телефония"
+	}
+	return s
+}
+
 func slugifyGKShortNameForTaskID(s string) string {
 	s = strings.TrimSpace(s)
 	var b strings.Builder
@@ -146,8 +177,17 @@ func (h *RequirementHandler) ensureTaskIdentifierUnique(taskID string, excludeID
 	return nil
 }
 
-// generateTaskIdentifier формирует ПОВ… с учётом ГК или в старом формате ПОВ{очередь}.{n}.
-func (h *RequirementHandler) generateTaskIdentifier(queueName, contractName string, excludeID uint) (string, error) {
+// taskIDPrefixForSystem: для системы 101 — префикс ПСС, иначе ПОВ.
+func taskIDPrefixForSystem(systemType string) string {
+	if strings.TrimSpace(systemType) == "101" {
+		return "ПСС"
+	}
+	return "ПОВ"
+}
+
+// generateTaskIdentifier формирует идентификатор (ПОВ… или ПСС… для системы 101) с учётом ГК или в формате {ПОВ|ПСС}{очередь}.{n}.
+func (h *RequirementHandler) generateTaskIdentifier(systemType, queueName, contractName string, excludeID uint) (string, error) {
+	prefix := taskIDPrefixForSystem(systemType)
 	queueNumber, err := extractQueueNumber(queueName)
 	if err != nil {
 		return "", err
@@ -182,9 +222,9 @@ func (h *RequirementHandler) generateTaskIdentifier(queueName, contractName stri
 	maxOrder := 0
 	var re *regexp.Regexp
 	if useExtended {
-		re = regexp.MustCompile(fmt.Sprintf(`^ПОВ\.%s\.%d\.(\d+)$`, regexp.QuoteMeta(slug), queueNumber))
+		re = regexp.MustCompile(fmt.Sprintf(`^%s\.%s\.%d\.(\d+)$`, regexp.QuoteMeta(prefix), regexp.QuoteMeta(slug), queueNumber))
 	} else {
-		re = regexp.MustCompile(fmt.Sprintf(`^ПОВ%d\.(\d+)$`, queueNumber))
+		re = regexp.MustCompile(fmt.Sprintf(`^%s%d\.(\d+)$`, regexp.QuoteMeta(prefix), queueNumber))
 	}
 
 	for _, item := range items {
@@ -202,9 +242,9 @@ func (h *RequirementHandler) generateTaskIdentifier(queueName, contractName stri
 	}
 
 	if useExtended {
-		return fmt.Sprintf("ПОВ.%s.%d.%d", slug, queueNumber, maxOrder+1), nil
+		return fmt.Sprintf("%s.%s.%d.%d", prefix, slug, queueNumber, maxOrder+1), nil
 	}
-	return fmt.Sprintf("ПОВ%d.%d", queueNumber, maxOrder+1), nil
+	return fmt.Sprintf("%s%d.%d", prefix, queueNumber, maxOrder+1), nil
 }
 
 // requirementListRow — ответ списка с полями ГК для подписи в таблице.
@@ -217,7 +257,7 @@ type requirementListRow struct {
 func (h *RequirementHandler) List(c *gin.Context) {
 	var items []models.Requirement
 
-	query := h.db.Order("id desc")
+	query := h.db.Model(&models.Requirement{})
 
 	archivedOnly := strings.TrimSpace(c.Query("archivedOnly")) == "true"
 	includeArchivedParam := strings.TrimSpace(c.Query("includeArchived")) == "true"
@@ -246,6 +286,13 @@ func (h *RequirementHandler) List(c *gin.Context) {
 
 	if strings.TrimSpace(c.Query("noFunction")) == "true" {
 		query = query.Where("contract_tz_function_id IS NULL")
+	}
+
+	sortOrder := strings.ToLower(strings.TrimSpace(c.Query("sortOrder")))
+	if sortOrder == "asc" {
+		query = query.Order("id asc")
+	} else {
+		query = query.Order("id desc")
 	}
 
 	if err := query.Find(&items).Error; err != nil {
@@ -294,9 +341,14 @@ func (h *RequirementHandler) List(c *gin.Context) {
 func (h *RequirementHandler) GetByID(c *gin.Context) {
 	var item models.Requirement
 
-	if err := h.db.Preload("Comments", func(db *gorm.DB) *gorm.DB {
-		return db.Order("created_at asc")
-	}).First(&item, c.Param("id")).Error; err != nil {
+	if err := h.db.
+		Preload("Attachments", func(db *gorm.DB) *gorm.DB {
+			return db.Order("created_at desc")
+		}).
+		Preload("Attachments.LibraryFile").
+		Preload("Comments", func(db *gorm.DB) *gorm.DB {
+			return db.Order("created_at asc")
+		}).First(&item, c.Param("id")).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Предложение не найдено"})
 		return
 	}
@@ -369,7 +421,7 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		taskIdentifier = tid
 	} else {
 		var err error
-		taskIdentifier, err = h.generateTaskIdentifier(strings.TrimSpace(req.ImplementationQueue), contractName, 0)
+		taskIdentifier, err = h.generateTaskIdentifier(normalizeRequirementSystemType(req.SystemType), strings.TrimSpace(req.ImplementationQueue), contractName, 0)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Ошибка генерации идентификатора задачи"})
 			return
@@ -390,7 +442,7 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		TZPointText:         strings.TrimSpace(req.TZPointText),
 		NmckPointText:       strings.TrimSpace(req.NmckPointText),
 		StatusText:          strings.TrimSpace(req.StatusText),
-		SystemType:          strings.TrimSpace(req.SystemType),
+		SystemType:          normalizeRequirementSystemType(req.SystemType),
 		AuthorName:          userName,
 		AuthorOrg:           userOrg,
 		LastEditedBy:        userName,
@@ -464,7 +516,7 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 			}
 			item.TaskIdentifier = explicitTID
 		} else {
-			taskIdentifier, err := h.generateTaskIdentifier(newQueue, contractName, item.ID)
+			taskIdentifier, err := h.generateTaskIdentifier(normalizeRequirementSystemType(req.SystemType), newQueue, contractName, item.ID)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"message": "Ошибка генерации идентификатора задачи"})
 				return
@@ -527,7 +579,7 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 		item.TZPointText = strings.TrimSpace(req.TZPointText)
 		item.NmckPointText = strings.TrimSpace(req.NmckPointText)
 	}
-	item.SystemType = strings.TrimSpace(req.SystemType)
+	item.SystemType = normalizeRequirementSystemType(req.SystemType)
 
 	if strings.TrimSpace(req.StatusText) == "" {
 		item.StatusText = "В обработку"
@@ -755,7 +807,7 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 			statusText = "В обработку"
 		}
 
-		systemType := getCellByHeader(row, headerMap, "Система")
+		systemType := normalizeRequirementSystemType(getCellByHeader(row, headerMap, "Система"))
 		if systemType == "" {
 			systemType = "112"
 		}
@@ -778,7 +830,7 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 			}
 		} else {
 			var err error
-			taskIdentifier, err = h.generateTaskIdentifier(normalizedQueue, contractName, 0)
+			taskIdentifier, err = h.generateTaskIdentifier(systemType, normalizedQueue, contractName, 0)
 			if err != nil {
 				result.Failed++
 				result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: ошибка генерации идентификатора", lineNumber))
@@ -831,7 +883,7 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 	var items []models.Requirement
 
-	query := h.db.Order("id desc")
+	query := h.db.Model(&models.Requirement{})
 
 	archivedOnly := strings.TrimSpace(c.Query("archivedOnly")) == "true"
 	includeArchivedParam := strings.TrimSpace(c.Query("includeArchived")) == "true"
@@ -862,6 +914,13 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 		query = query.Where("contract_tz_function_id IS NULL")
 	}
 
+	sortOrder := strings.ToLower(strings.TrimSpace(c.Query("sortOrder")))
+	if sortOrder == "asc" {
+		query = query.Order("id asc")
+	} else {
+		query = query.Order("id desc")
+	}
+
 	if err := query.Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения предложений"})
 		return
@@ -889,12 +948,6 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 		"П.п. НМЦК",
 		"Статус",
 		"Система",
-		"Автор создания",
-		"Организация автора",
-		"Дата создания",
-		"Последний редактор",
-		"Организация редактора",
-		"Дата изменения",
 	}
 
 	for i, header := range headers {
@@ -920,13 +973,7 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 			item.TZPointText,
 			item.NmckPointText,
 			item.StatusText,
-			item.SystemType,
-			item.AuthorName,
-			item.AuthorOrg,
-			item.CreatedAt.Format("2006-01-02 15:04:05"),
-			item.LastEditedBy,
-			item.LastEditedOrg,
-			item.UpdatedAt.Format("2006-01-02 15:04:05"),
+			normalizeRequirementSystemType(item.SystemType),
 		}
 
 		for colIndex, value := range values {
@@ -940,7 +987,7 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 	_ = file.SetColWidth(sheetName, "C", "E", 24)
 	_ = file.SetColWidth(sheetName, "F", "H", 50)
 	_ = file.SetColWidth(sheetName, "I", "L", 28)
-	_ = file.SetColWidth(sheetName, "M", "S", 22)
+	_ = file.SetColWidth(sheetName, "M", "O", 22)
 
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	c.Header("Content-Disposition", `attachment; filename="requirements_export.xlsx"`)

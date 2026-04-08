@@ -13,17 +13,17 @@
 
         <div class="header-actions">
           <div class="header-before-avatar">
-            <el-button v-if="authStore.isSuperuser" @click="router.push('/admin/users')">
-              Пользователи
-            </el-button>
             <el-button
               v-if="authStore.isSuperuser"
-              type="danger"
-              plain
+              text
+              class="header-btn-delete-all"
               :loading="deleteAllLoading"
               @click="handleDeleteAllRequirements"
             >
               Удалить все предложения
+            </el-button>
+            <el-button v-if="authStore.isSuperuser" @click="router.push('/admin/users')">
+              Пользователи
             </el-button>
             <el-button @click="router.push('/gk-directory')">Справочник ГК</el-button>
           </div>
@@ -95,8 +95,8 @@
           <div class="toolbar-left">
             <div class="main-filters">
               <el-button
-                :type="systemType === 'telephony' ? 'primary' : 'default'"
-                @click="setSystem('telephony')"
+                :type="systemType === 'Телефония' ? 'primary' : 'default'"
+                @click="setSystem('Телефония')"
               >
                 Телефония
               </el-button>
@@ -121,15 +121,30 @@
               >
                 Все
               </el-button>
+
+              <el-tooltip content="Порядок списка по дате добавления записи (id)" placement="bottom">
+                <el-switch
+                  v-model="listSortNewestFirst"
+                  inline-prompt
+                  active-text="Сначала новые"
+                  inactive-text="Сначала старые"
+                  class="list-sort-switch list-sort-switch--toolbar"
+                />
+              </el-tooltip>
             </div>
 
             <div class="search-row">
-              <el-input
-                v-model="search"
-                placeholder="Поиск по ID, названию, инициатору, ответственному"
-                clearable
-                class="search-input"
-              />
+              <el-tooltip
+                content="Поиск по подстроке: ГК, раздел, комментарии, обсуждение, примечание, п.п. ТЗ/НМЦК, статус, система, очередь, автор и редактор (ФИО, организация)"
+                placement="bottom"
+              >
+                <el-input
+                  v-model="search"
+                  placeholder="Поиск по всем полям карточки, включая ГК и примечание"
+                  clearable
+                  class="search-input"
+                />
+              </el-tooltip>
 
               <el-select
                 v-model="status"
@@ -228,7 +243,7 @@
               <el-table-column
                 prop="shortName"
                 label="Наименование"
-                width="300"
+                width="330"
                 show-overflow-tooltip
               />
 
@@ -246,13 +261,20 @@
                 show-overflow-tooltip
               />
 
+              <el-table-column
+                prop="sectionName"
+                label="Раздел"
+                width="130"
+                show-overflow-tooltip
+              />
+
               <el-table-column prop="implementationQueue" label="Очередь" width="120">
                 <template #default="{ row }">
                   <QueueTag :queue="row.implementationQueue" />
                 </template>
               </el-table-column>
 
-              <el-table-column label="ГК" width="260" show-overflow-tooltip>
+              <el-table-column label="ГК" width="190" show-overflow-tooltip>
                 <template #default="{ row }">
                   <span class="gk-cell">
                     {{ row.contractName || '—' }}
@@ -266,7 +288,7 @@
                 </template>
               </el-table-column>
 
-              <el-table-column label="Функция НМЦК, ТЗ" width="260" class-name="tz-col">
+              <el-table-column label="Функция НМЦК, ТЗ" width="280" class-name="tz-col">
                 <template #default="{ row }">
                   <button
                     type="button"
@@ -292,7 +314,7 @@
                 </template>
               </el-table-column>
 
-              <el-table-column label="Предложение" width="400">
+              <el-table-column label="Предложение" width="456">
                 <template #default="{ row }">
                   <span class="cell-clamp" :title="row.proposalText">
                     {{ shortText(row.proposalText, 90) }}
@@ -300,7 +322,7 @@
                 </template>
               </el-table-column>
 
-              <el-table-column label="Комментарии и описание проблем" width="350">
+              <el-table-column label="Комментарии и описание проблем" width="400">
                 <template #default="{ row }">
                   <span class="cell-clamp" :title="row.problemComment">
                     {{ shortText(row.problemComment, 90) }}
@@ -308,44 +330,25 @@
                 </template>
               </el-table-column>
 
-              <el-table-column prop="createdAt" label="Создано" width="110">
+              <el-table-column label="" width="64" align="center" class-name="row-menu-col">
                 <template #default="{ row }">
-                  {{ formatDateShort(row.createdAt) }}
-                </template>
-              </el-table-column>
-
-              <!--
-                В read-only режиме оставляем только кнопку открытия карточки.
-              -->
-              <el-table-column label="" width="200" align="center">
-                <template #default="{ row }">
-                  <div class="row-actions">
-                    <el-tooltip content="Открыть" placement="top">
-                      <el-button size="small" circle @click.stop="handleRowClick(row)">
-                        <el-icon><View /></el-icon>
-                      </el-button>
-                    </el-tooltip>
-
-                    <template v-if="canEdit">
-                      <el-tooltip content="Удалить запись" placement="top">
-                        <el-button size="small" circle type="danger" plain @click.stop="handleDelete(row)">
-                          <el-icon><Delete /></el-icon>
-                        </el-button>
-                      </el-tooltip>
-
-                      <el-tooltip v-if="!row.isArchived" content="В архив" placement="top">
-                        <el-button size="small" circle type="warning" @click.stop="handleArchive(row)">
-                          <el-icon><FolderDelete /></el-icon>
-                        </el-button>
-                      </el-tooltip>
-
-                      <el-tooltip v-else content="Восстановить" placement="top">
-                        <el-button size="small" circle type="success" @click.stop="handleRestore(row)">
-                          <el-icon><RefreshRight /></el-icon>
-                        </el-button>
-                      </el-tooltip>
+                  <el-dropdown trigger="click" @command="(cmd: string) => handleRowMenuCommand(cmd, row)">
+                    <el-button size="small" circle class="row-menu-trigger" @click.stop>
+                      <el-icon class="row-menu-ellipsis"><MoreFilled /></el-icon>
+                    </el-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="open">Просмотр</el-dropdown-item>
+                        <template v-if="canEdit">
+                          <el-dropdown-item command="delete" divided>Удалить</el-dropdown-item>
+                          <el-dropdown-item v-if="!row.isArchived" command="archive">
+                            В архив
+                          </el-dropdown-item>
+                          <el-dropdown-item v-else command="restore">Восстановить</el-dropdown-item>
+                        </template>
+                      </el-dropdown-menu>
                     </template>
-                  </div>
+                  </el-dropdown>
                 </template>
               </el-table-column>
             </el-table>
@@ -404,7 +407,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Close, Delete, FolderDelete, RefreshRight, View } from '@element-plus/icons-vue'
+import { ArrowDown, Close, MoreFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   archiveRequirement,
@@ -485,9 +488,13 @@ const floatingScrollbarRef = ref<HTMLElement | null>(null)
  * Ширина таблицы = сумма ширин колонок.
  */
 /** Сумма фиксированных ширин колонок (table-layout: fixed). */
+/** Сумма width колонок таблицы (table-layout: fixed). */
 const tableWidth = 2780
 
 const filterNoFunction = ref(false)
+
+/** true — сначала новые (id desc), false — сначала старые (id asc). */
+const listSortNewestFirst = ref(true)
 
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -534,15 +541,6 @@ function shortText(value: string, maxLength = 80) {
 }
 
 /**
- * Короткий формат даты.
- */
-function formatDateShort(value: string) {
-  if (!value) return ''
-  const date = new Date(value)
-  return date.toLocaleDateString('ru-RU')
-}
-
-/**
  * Быстрый фильтр по системе.
  */
 function setSystem(value: string) {
@@ -559,6 +557,7 @@ function resetFilters() {
   archiveFilterMode.value = 'active'
   implementationQueue.value = ''
   filterNoFunction.value = false
+  listSortNewestFirst.value = true
   clearSearchDebounce()
   loadData()
 }
@@ -614,6 +613,7 @@ async function loadData() {
       search: search.value || undefined,
       implementationQueue: implementationQueue.value || undefined,
       noFunction: filterNoFunction.value || undefined,
+      sortOrder: listSortNewestFirst.value ? 'desc' : 'asc',
       ...arch,
     })
     if (seq !== loadListSeq) return
@@ -638,6 +638,7 @@ async function handleExport() {
       search: search.value || undefined,
       implementationQueue: implementationQueue.value || undefined,
       noFunction: filterNoFunction.value || undefined,
+      sortOrder: listSortNewestFirst.value ? 'desc' : 'asc',
       ...arch,
     })
 
@@ -785,6 +786,24 @@ function handleRowClick(row: Requirement) {
   detailsVisible.value = true
 }
 
+function handleRowMenuCommand(cmd: string, row: Requirement) {
+  if (cmd === 'open') {
+    handleRowClick(row)
+    return
+  }
+  if (cmd === 'delete') {
+    void handleDelete(row)
+    return
+  }
+  if (cmd === 'archive') {
+    void handleArchive(row)
+    return
+  }
+  if (cmd === 'restore') {
+    void handleRestore(row)
+  }
+}
+
 /**
  * Приглушаем архивные строки.
  */
@@ -864,6 +883,11 @@ watch(
 )
 
 watch(systemType, () => {
+  clearSearchDebounce()
+  loadData()
+})
+
+watch(listSortNewestFirst, () => {
   clearSearchDebounce()
   loadData()
 })
@@ -996,6 +1020,28 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.header-btn-delete-all {
+  color: rgb(236, 100, 82);
+  font-weight: 500;
+}
+
+.header-btn-delete-all:hover {
+  color: white;
+  background-color: rgba(231, 101, 84, 0.56) !important;
+}
+
+/* После клика остаётся :focus — не показываем его как «наведение» */
+.header-btn-delete-all:focus {
+  outline: none;
+  color: rgb(236, 100, 82) !important;
+  background-color: transparent !important;
+}
+
+.header-btn-delete-all:focus:hover {
+  color: white !important;
+  background-color: rgba(231, 101, 84, 0.56) !important;
 }
 
 .toolbar-row {
@@ -1136,9 +1182,14 @@ onBeforeUnmount(() => {
 
 .main-filters {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
   min-width: 0;
+}
+
+.list-sort-switch--toolbar {
+  flex-shrink: 0;
 }
 
 .search-row {
@@ -1151,8 +1202,13 @@ onBeforeUnmount(() => {
 
 .search-input {
   width: 360px;
-  flex: 0 0 360px;
+  flex: 1 1 280px;
   min-width: 0;
+  max-width: 480px;
+}
+
+.list-sort-switch {
+  flex-shrink: 0;
 }
 
 .status-select {
@@ -1282,16 +1338,17 @@ onBeforeUnmount(() => {
   word-break: break-word;
 }
 
-.row-actions {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 8px;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  margin: 0 auto;
-  padding: 0 8px;
-  box-sizing: border-box;
+.requirements-table :deep(.row-menu-col .cell) {
+  padding: 8px 4px;
+  overflow: visible;
+}
+
+.row-menu-trigger {
+  padding: 6px;
+}
+
+.row-menu-ellipsis {
+  transform: rotate(90deg);
 }
 
 .gk-cell {

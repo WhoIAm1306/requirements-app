@@ -8,11 +8,29 @@
   --app-text: #1a2332;
   --app-text-muted: #5c6b7f;
   --app-primary: #1e4d7b;
-  --app-primary-hover: #163a5e;
+  /* Наведение: чуть более светлый сине-морской тон, без «голубого» Element Plus */
+  --app-primary-hover: #2a5f90;
+  --app-primary-active: #163a5e;
   --app-accent: #2d6a4f;
   --app-radius-lg: 14px;
   --app-radius-md: 10px;
   --app-shadow: 0 4px 20px rgba(26, 35, 50, 0.06);
+
+  /* Согласуем системный primary Element Plus с корпоративным синим (меньше голубых оттенков при hover) */
+  --el-color-primary: #1e4d7b;
+  --el-color-primary-dark-2: #163a5e;
+  --el-color-primary-light-3: #5078a0;
+  --el-color-primary-light-5: #7e9ab8;
+  --el-color-primary-light-7: #a8bbd0;
+  --el-color-primary-light-8: #c5d3e3;
+  --el-color-primary-light-9: #e2e9f2;
+  --el-color-primary-rgb: 30, 77, 123;
+}
+
+/* У кнопок убираем системную обводку в состоянии focus (в т.ч. после клика). */
+.el-button:focus,
+button:focus {
+  outline: none;
 }
 
 html,
@@ -28,12 +46,48 @@ body {
   background: var(--app-bg);
 }
 
-/* Element Plus: точечная подстройка под официальный стиль */
+/* Element Plus: кнопки — hover с приглушённо-синим оттенком, не небесно-голубым */
 .el-button--primary {
   --el-button-bg-color: var(--app-primary);
   --el-button-border-color: var(--app-primary);
   --el-button-hover-bg-color: var(--app-primary-hover);
   --el-button-hover-border-color: var(--app-primary-hover);
+  --el-button-hover-text-color: #ffffff;
+  --el-button-active-bg-color: var(--app-primary-active);
+  --el-button-active-border-color: var(--app-primary-active);
+}
+
+.el-button--default {
+  --el-button-hover-text-color: var(--app-primary);
+  --el-button-hover-border-color: #7a93ae;
+  --el-button-hover-bg-color: #e2e9f2;
+}
+
+.el-button.is-link {
+  --el-button-hover-text-color: var(--app-primary-hover);
+}
+
+/* Переключатели: включено — как основные кнопки; подписи снаружи — тёмный текст, активная — primary */
+.el-switch {
+  --el-switch-on-color: var(--app-primary);
+  --el-switch-off-color: #d1dae6;
+}
+
+.el-switch .el-switch__label {
+  color: var(--app-text) !important;
+}
+
+.el-switch .el-switch__label.is-active {
+  color: var(--app-primary) !important;
+}
+
+/* inline-prompt: у EP текст всегда белый — для «выкл» нужен читаемый чёрный на светлой дорожке */
+.el-switch .el-switch__core .el-switch__inner .el-switch__inner-wrapper {
+  color: var(--app-text) !important;
+}
+
+.el-switch.is-checked .el-switch__core .el-switch__inner .el-switch__inner-wrapper {
+  color: #ffffff !important;
 }
 
 .el-card {

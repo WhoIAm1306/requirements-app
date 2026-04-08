@@ -40,7 +40,31 @@ type Requirement struct {
 	ArchivedBy          string     `gorm:"size:255" json:"archivedBy"`
 	ArchivedByOrg       string     `gorm:"size:50" json:"archivedByOrg"`
 	DeletedAt           gorm.DeletedAt `gorm:"index" json:"-"`
-	Comments            []Comment      `json:"comments,omitempty"`
+	Comments            []Comment                `json:"comments,omitempty"`
+	Attachments         []RequirementAttachment  `json:"attachments,omitempty"`
+}
+
+// RequirementAttachmentLibrary — глобальное хранилище файлов для повторного прикрепления к предложениям.
+type RequirementAttachmentLibrary struct {
+	ID               uint      `gorm:"primaryKey" json:"id"`
+	OriginalFileName string    `gorm:"size:255;index" json:"originalFileName"`
+	StoredFileName   string    `gorm:"size:255" json:"-"`
+	ContentType      string    `gorm:"size:255" json:"contentType"`
+	FilePath         string    `gorm:"size:1024" json:"-"`
+	UploadedByName   string    `gorm:"size:255" json:"uploadedByName"`
+	UploadedByOrg    string    `gorm:"size:50" json:"uploadedByOrg"`
+	CreatedAt        time.Time `json:"createdAt"`
+	LastUsedAt       time.Time `json:"lastUsedAt"`
+}
+
+// RequirementAttachment — связь предложения с файлом из библиотеки (один файл может быть у нескольких предложений).
+type RequirementAttachment struct {
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	RequirementID uint      `gorm:"uniqueIndex:uniq_req_library_file;index;not null" json:"requirementId"`
+	LibraryFileID uint      `gorm:"uniqueIndex:uniq_req_library_file;index;not null" json:"libraryFileId"`
+	CreatedAt     time.Time `json:"createdAt"`
+
+	LibraryFile *RequirementAttachmentLibrary `gorm:"foreignKey:LibraryFileID" json:"libraryFile,omitempty"`
 }
 
 // Comment — комментарий внутри карточки предложения.

@@ -57,7 +57,7 @@ export function downloadRequirementsTemplate() {
 
   const example3 = [
     '',
-    'Пример: колонка «Система» — telephony (Телефония в интерфейсе)',
+    'Пример: система «Телефония»',
     '',
     'Иванов И.И.',
     '',
@@ -70,7 +70,7 @@ export function downloadRequirementsTemplate() {
     '',
     '',
     'Новое',
-    'telephony',
+    'Телефония',
   ]
 
   const rows = [Array.from(REQUIREMENTS_HEADERS), example1, example2, example3]

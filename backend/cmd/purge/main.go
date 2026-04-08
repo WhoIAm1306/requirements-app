@@ -1,6 +1,6 @@
 // Утилита: удалить все данные приложения из БД, кроме таблицы users.
 // Запуск из каталога backend: go run ./cmd/purge
-// Также удаляет каталог uploads/contracts (файлы вложений ГК).
+// Также удаляет каталоги uploads/contracts и uploads/requirements (вложения).
 package main
 
 import (
@@ -46,6 +46,8 @@ func main() {
 TRUNCATE TABLE
 	author_dictionaries,
 	comments,
+	requirement_attachments,
+	requirement_attachment_libraries,
 	contract_attachments,
 	contract_dictionaries,
 	contract_stages,
@@ -66,10 +68,11 @@ RESTART IDENTITY CASCADE`
 
 	log.Println("готово: таблицы очищены, users сохранён")
 
-	uploads := filepath.Join("uploads", "contracts")
-	if err := os.RemoveAll(uploads); err != nil {
-		log.Printf("предупреждение: не удалось удалить %s: %v", uploads, err)
-	} else {
-		log.Printf("готово: удалён каталог %s", uploads)
+	for _, sub := range []string{filepath.Join("uploads", "contracts"), filepath.Join("uploads", "requirements")} {
+		if err := os.RemoveAll(sub); err != nil {
+			log.Printf("предупреждение: не удалось удалить %s: %v", sub, err)
+		} else {
+			log.Printf("готово: удалён каталог %s", sub)
+		}
 	}
 }

@@ -8,6 +8,7 @@ export async function exportRequirementsFile(params?: {
   archivedOnly?: boolean
   noFunction?: boolean
   implementationQueue?: string
+  sortOrder?: 'asc' | 'desc'
 }) {
   const response = await apiClient.get('/export/requirements', {
     params,

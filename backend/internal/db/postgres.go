@@ -41,10 +41,17 @@ func NewPostgres(cfg *config.Config) (*gorm.DB, error) {
 		&models.ContractStage{},
 		&models.ContractTZFunction{},
 		&models.ContractAttachment{},
+		&models.RequirementAttachmentLibrary{},
+		&models.RequirementAttachment{},
 		&models.User{},
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	// Разовое приведение устаревшего кода системы «Телефония».
+	if res := database.Exec(`UPDATE requirements SET system_type = 'Телефония' WHERE system_type = 'telephony'`); res.Error != nil {
+		return nil, res.Error
 	}
 
 	if err := seedDefaultQueues(database); err != nil {

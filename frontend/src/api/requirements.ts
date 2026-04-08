@@ -1,5 +1,9 @@
 import apiClient from './client'
-import type { Requirement, RequirementPayload } from '@/types'
+import type {
+  Requirement,
+  RequirementAttachmentLibraryItem,
+  RequirementPayload,
+} from '@/types'
 
 /**
  * Получение списка предложений.
@@ -12,6 +16,8 @@ export async function fetchRequirements(params?: {
   archivedOnly?: boolean
   noFunction?: boolean
   implementationQueue?: string
+  /** Порядок по id: asc — сначала старые, desc — сначала новые (по умолчанию на бэкенде). */
+  sortOrder?: 'asc' | 'desc'
 }) {
   const { data } = await apiClient.get<Requirement[]>('/requirements', { params })
   return data
@@ -96,4 +102,43 @@ export interface RequirementGKLinkInfo {
 export async function fetchRequirementGKLink(id: number) {
   const { data } = await apiClient.get<RequirementGKLinkInfo>(`/requirements/${id}/gk-link`)
   return data
+}
+
+/** Справочник ранее загруженных файлов (подсказки для прикрепления). */
+export async function fetchRequirementAttachmentLibrary(search?: string) {
+  const { data } = await apiClient.get<RequirementAttachmentLibraryItem[]>(
+    '/requirements/attachment-library',
+    { params: search?.trim() ? { search: search.trim() } : {} },
+  )
+  return data
+}
+
+export async function uploadRequirementAttachments(id: number, files: File[]) {
+  const formData = new FormData()
+  for (const f of files) {
+    formData.append('files', f)
+  }
+  const { data } = await apiClient.post<{ created: number }>(
+    `/requirements/${id}/attachments`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  )
+  return data
+}
+
+export async function attachRequirementFromLibrary(id: number, libraryFileId: number) {
+  const { data } = await apiClient.post<unknown>(`/requirements/${id}/attachments/from-library`, {
+    libraryFileId,
+  })
+  return data
+}
+
+export async function downloadRequirementAttachment(attachmentId: number) {
+  return apiClient.get(`/requirements/attachments/${attachmentId}/download`, {
+    responseType: 'blob',
+  })
+}
+
+export async function deleteRequirementAttachment(attachmentId: number) {
+  await apiClient.delete(`/requirements/attachments/${attachmentId}`)
 }
