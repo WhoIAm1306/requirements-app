@@ -1,3 +1,4 @@
+/** Импорты Excel: предложения, пункты ТЗ, функции ГК. */
 import apiClient from './client'
 
 export interface ImportResult {

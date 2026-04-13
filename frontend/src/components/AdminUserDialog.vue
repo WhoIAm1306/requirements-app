@@ -34,6 +34,29 @@
         </el-select>
       </el-form-item>
 
+      <el-form-item
+        v-if="form.accessLevel === 'read'"
+        label="Дополнительные права к карточке требования"
+      >
+        <el-select
+          v-model="selectedGrantKeys"
+          multiple
+          filterable
+          collapse-tags
+          collapse-tags-tooltip
+          :max-collapse-tags="6"
+          placeholder="Выберите атрибуты, которые пользователь сможет менять"
+          style="width: 100%"
+        >
+          <el-option
+            v-for="opt in REQUIREMENT_FIELD_GRANT_OPTIONS"
+            :key="opt.value"
+            :label="opt.label"
+            :value="opt.value"
+          />
+        </el-select>
+      </el-form-item>
+
       <el-form-item label="Активен">
         <el-switch v-model="form.isActive" />
       </el-form-item>
@@ -49,12 +72,12 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { createAdminUser, updateAdminUser } from '@/api/adminUsers'
-import type { AdminUser, AccessLevel, Organization } from '@/types'
+import { REQUIREMENT_FIELD_GRANT_OPTIONS } from '@/constants/requirementFieldGrants'
+import type { AdminUser, AccessLevel, Organization, RequirementFieldGrants } from '@/types'
 
-// Режим create/edit и исходные данные формы.
 const props = defineProps<{
   modelValue: boolean
   mode: 'create' | 'edit'
@@ -66,10 +89,8 @@ const emit = defineEmits<{
   (e: 'saved'): void
 }>()
 
-// Небольшой флаг загрузки, завязанный на локальную модель.
 const loading = defineModel<boolean>('loading', { default: false })
 
-// Состояние формы.
 const form = reactive<{
   fullName: string
   organization: Organization | string
@@ -86,7 +107,15 @@ const form = reactive<{
   isActive: true,
 })
 
-// При открытии модалки заполняем или очищаем форму.
+const selectedGrantKeys = ref<string[]>([])
+
+function grantsKeysFromUser(u: AdminUser | null): string[] {
+  if (!u?.requirementFieldGrants) return []
+  return Object.entries(u.requirementFieldGrants)
+    .filter(([, v]) => Boolean(v))
+    .map(([k]) => k)
+}
+
 watch(
   () => [props.modelValue, props.mode, props.initialUser],
   ([opened]) => {
@@ -99,6 +128,7 @@ watch(
       form.password = ''
       form.accessLevel = props.initialUser.accessLevel
       form.isActive = props.initialUser.isActive
+      selectedGrantKeys.value = grantsKeysFromUser(props.initialUser)
       return
     }
 
@@ -108,14 +138,27 @@ watch(
     form.password = ''
     form.accessLevel = 'read'
     form.isActive = true
+    selectedGrantKeys.value = []
   },
   { immediate: true },
 )
 
-// Сохранение пользователя.
+function requirementGrantsForPayload(): RequirementFieldGrants {
+  if (form.accessLevel === 'read') {
+    const out: RequirementFieldGrants = {}
+    const allowed = new Set(REQUIREMENT_FIELD_GRANT_OPTIONS.map((o) => o.value))
+    for (const key of selectedGrantKeys.value) {
+      if (allowed.has(key)) out[key] = true
+    }
+    return out
+  }
+  return {}
+}
+
 async function submit() {
   try {
     loading.value = true
+    const requirementFieldGrants = requirementGrantsForPayload()
 
     if (props.mode === 'create') {
       await createAdminUser({
@@ -125,6 +168,7 @@ async function submit() {
         password: form.password,
         accessLevel: form.accessLevel,
         isActive: form.isActive,
+        requirementFieldGrants,
       })
       ElMessage.success('Пользователь создан')
     } else if (props.initialUser) {
@@ -134,6 +178,7 @@ async function submit() {
         email: form.email,
         accessLevel: form.accessLevel,
         isActive: form.isActive,
+        requirementFieldGrants,
       })
       ElMessage.success('Пользователь обновлён')
     }

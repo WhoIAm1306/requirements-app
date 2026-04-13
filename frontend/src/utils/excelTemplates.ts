@@ -9,7 +9,7 @@ const REQUIREMENTS_HEADERS = [
   'Предложение',
   'Комментарии и описание проблем',
   'Обсуждение',
-  'Номер очереди при реализации',
+  'Приоритет (очередь)',
   'Примечание',
   'ГК',
   'П.п. ТЗ',
@@ -57,10 +57,10 @@ export function downloadRequirementsTemplate() {
 
   const example3 = [
     '',
-    'Пример: система «Телефония»',
+    'Пример: раздел «Телефония» + система 112',
     '',
     'Иванов И.И.',
-    '',
+    'Телефония',
     'Текст',
     '',
     '',
@@ -70,7 +70,7 @@ export function downloadRequirementsTemplate() {
     '',
     '',
     'Новое',
-    'Телефония',
+    '112',
   ]
 
   const rows = [Array.from(REQUIREMENTS_HEADERS), example1, example2, example3]

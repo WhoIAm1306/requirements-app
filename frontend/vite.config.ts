@@ -9,4 +9,17 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('element-plus')) return 'element-plus'
+          if (id.includes('xlsx')) return 'xlsx'
+          if (id.includes('@element-plus/icons-vue')) return 'icons'
+          if (id.includes('vue') || id.includes('pinia') || id.includes('vue-router')) return 'vue-vendor'
+        },
+      },
+    },
+  },
 })

@@ -923,7 +923,7 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 16px 20px 28px;
+  padding: 16px 0px 28px;
   box-sizing: border-box;
 }
 

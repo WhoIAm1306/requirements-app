@@ -1,3 +1,4 @@
+// Точка входа HTTP API: Gin, JWT, миграции БД, раздача собранного фронта.
 package main
 
 import (
@@ -95,6 +96,17 @@ func main() {
 		read.GET("/contracts/:id/attachments", contractDirectoryHandler.ListContractAttachments)
 		read.GET("/contracts/attachments/:attachmentId/download", contractDirectoryHandler.DownloadContractAttachment)
 		read.GET("/queues", dictionaryHandler.ListQueues)
+
+		// Комментарий к предложению: edit/superuser или read с грантом comment (см. users.requirement_field_grants).
+		read.POST("/requirements/:id/comments", middleware.RequireCommentOrEdit(), requirementHandler.AddComment)
+
+		// Обновление карточки: edit/superuser или read с грантами на поля (кроме одного только comment).
+		read.PUT("/requirements/:id", middleware.RequireEditOrSuperuserOrRequirementPUTGrants(), requirementHandler.Update)
+
+		// Вложения: edit/superuser или грант attachments.
+		read.POST("/requirements/:id/attachments/from-library", middleware.RequireEditOrSuperuserOrAttachmentGrant(), requirementHandler.AttachRequirementFromLibrary)
+		read.POST("/requirements/:id/attachments", middleware.RequireEditOrSuperuserOrAttachmentGrant(), requirementHandler.UploadRequirementAttachments)
+		read.DELETE("/requirements/attachments/:attachmentId", middleware.RequireEditOrSuperuserOrAttachmentGrant(), requirementHandler.DeleteRequirementAttachment)
 	}
 
 	// Маршруты изменения данных доступны только edit-пользователю или суперпользователю.
@@ -102,12 +114,7 @@ func main() {
 	edit.Use(authMw, middleware.RequireEditOrSuperuser())
 	{
 		edit.POST("/requirements", requirementHandler.Create)
-		edit.PUT("/requirements/:id", requirementHandler.Update)
 		edit.DELETE("/requirements/:id", requirementHandler.Delete)
-		edit.POST("/requirements/:id/attachments/from-library", requirementHandler.AttachRequirementFromLibrary)
-		edit.POST("/requirements/:id/attachments", requirementHandler.UploadRequirementAttachments)
-		edit.DELETE("/requirements/attachments/:attachmentId", requirementHandler.DeleteRequirementAttachment)
-		edit.POST("/requirements/:id/comments", requirementHandler.AddComment)
 		edit.POST("/requirements/:id/archive", requirementHandler.Archive)
 		edit.POST("/requirements/:id/restore", requirementHandler.Restore)
 
@@ -137,6 +144,7 @@ func main() {
 		admin.GET("/users", userHandler.ListUsers)
 		admin.POST("/users", userHandler.CreateUser)
 		admin.PUT("/users/:id", userHandler.UpdateUser)
+		admin.DELETE("/users/:id", userHandler.DeleteUser)
 		admin.DELETE("/requirements", requirementHandler.DeleteAll)
 	}
 

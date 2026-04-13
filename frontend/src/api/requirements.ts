@@ -5,22 +5,36 @@ import type {
   RequirementPayload,
 } from '@/types'
 
-/**
- * Получение списка предложений.
- */
-export async function fetchRequirements(params?: {
+/** Общие query-параметры списка и экспорта Excel (совпадают с бэкендом). */
+export type RequirementListQuery = {
   systemType?: string
+  /** true — только раздел «Телефония»; false — без этого раздела (в сочетании с systemType). */
+  telephonySection?: 'true' | 'false'
   status?: string
   search?: string
   includeArchived?: boolean
   archivedOnly?: boolean
   noFunction?: boolean
   implementationQueue?: string
-  /** Порядок по id: asc — сначала старые, desc — сначала новые (по умолчанию на бэкенде). */
+  /** Порядок по id: asc — старые сверху, desc — новые сверху. */
   sortOrder?: 'asc' | 'desc'
-}) {
+}
+
+/**
+ * Получение списка предложений.
+ */
+export async function fetchRequirements(params?: RequirementListQuery) {
   const { data } = await apiClient.get<Requirement[]>('/requirements', { params })
   return data
+}
+
+/** Экспорт таблицы предложений в Excel (тот же фильтр, что у списка). */
+export async function exportRequirementsFile(params?: RequirementListQuery) {
+  const response = await apiClient.get('/export/requirements', {
+    params,
+    responseType: 'blob',
+  })
+  return response.data as Blob
 }
 
 /**

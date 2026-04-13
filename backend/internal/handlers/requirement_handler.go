@@ -14,7 +14,82 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
+
+	"requirements-app/backend/internal/middleware"
 )
+
+const telephonySectionName = "Телефония"
+
+func isTelephonySectionName(s string) bool {
+	return strings.EqualFold(strings.TrimSpace(s), telephonySectionName)
+}
+
+// applyRequirementListScope: systemType (112|101) и telephonySection true|false — сочетание раздела и системы.
+func applyRequirementListScope(query *gorm.DB, c *gin.Context) *gorm.DB {
+	if ts := strings.TrimSpace(c.Query("systemType")); ts != "" {
+		query = query.Where("system_type = ?", ts)
+	}
+	switch strings.TrimSpace(c.Query("telephonySection")) {
+	case "true":
+		query = query.Where("LOWER(TRIM(section_name)) = ?", strings.ToLower(telephonySectionName))
+	case "false":
+		query = query.Where("(TRIM(COALESCE(section_name, '')) = '' OR LOWER(TRIM(section_name)) <> ?)", strings.ToLower(telephonySectionName))
+	}
+	return query
+}
+
+func validateRequirementSystemType(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "112" || s == "101" {
+		return nil
+	}
+	return fmt.Errorf("система должна быть 112 или 101")
+}
+
+func normalizeRequirementSystemType(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "112" || s == "101" {
+		return s
+	}
+	return ""
+}
+
+// Импорт Excel: колонка «Система» + раздел; значение «Телефония» переносится в раздел.
+func formatTimePtrForExcel(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.Format("02.01.2006 15:04")
+}
+
+func formatDatePtrForExcel(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.Format("02.01.2006")
+}
+
+func parseImportSystemAndSection(systemCol, sectionCol string) (systemType string, sectionName string) {
+	systemCol = strings.TrimSpace(systemCol)
+	sectionName = strings.TrimSpace(sectionCol)
+	low := strings.ToLower(systemCol)
+	if systemCol == telephonySectionName || low == "telephony" {
+		if sectionName == "" {
+			sectionName = telephonySectionName
+		}
+		return "112", sectionName
+	}
+	if systemCol == "112" || systemCol == "101" {
+		return systemCol, sectionName
+	}
+	if strings.Contains(low, "101") {
+		return "101", sectionName
+	}
+	if strings.Contains(low, "112") {
+		return "112", sectionName
+	}
+	return "112", sectionName
+}
 
 type RequirementHandler struct {
 	db *gorm.DB
@@ -54,6 +129,7 @@ func applyRequirementTextSearch(db *gorm.DB, rawSearch string) *gorm.DB {
 		"last_edited_org",
 		"archived_by",
 		"archived_by_org",
+		"dit_outgoing_number",
 	}
 	parts := make([]string, 0, len(fields))
 	args := make([]interface{}, 0, len(fields))
@@ -63,6 +139,22 @@ func applyRequirementTextSearch(db *gorm.DB, rawSearch string) *gorm.DB {
 	}
 	sql := "(" + strings.Join(parts, " OR ") + ")"
 	return db.Where(sql, args...)
+}
+
+// applyRequirementListSQLSelect — для списка не читаем огромные TEXT целиком (Postgres LEFT), поля
+// примечание/обсуждение в таблице не нужны — экономия IO и размер JSON.
+func applyRequirementListSQLSelect(db *gorm.DB) *gorm.DB {
+	return db.Select(
+		"id", "task_identifier", "short_name", "initiator", "responsible_person", "section_name",
+		"implementation_queue", "contract_name", "contract_tz_function_id",
+		"tz_point_text", "nmck_point_text", "status_text", "system_type",
+		"created_at", "updated_at", "completed_at", "dit_outgoing_number", "dit_outgoing_date",
+		"author_name", "author_org", "last_edited_by", "last_edited_org",
+		"is_archived", "archived_at", "archived_by", "archived_by_org",
+		"deleted_at",
+		"LEFT(COALESCE(proposal_text, ''), 520) AS proposal_text",
+		"LEFT(COALESCE(problem_comment, ''), 520) AS problem_comment",
+	)
 }
 
 type CreateRequirementRequest struct {
@@ -81,6 +173,9 @@ type CreateRequirementRequest struct {
 	SystemType          string `json:"systemType"`
 	ContractName        string `json:"contractName"`
 	ContractTZFunctionID *uint  `json:"contractTZFunctionId"`
+	CompletedAt         *time.Time `json:"completedAt"`
+	DitOutgoingNumber   string     `json:"ditOutgoingNumber"`
+	DitOutgoingDate     *time.Time `json:"ditOutgoingDate"`
 	// TaskIdentifier — необязательно; если пусто, сгенерируется автоматически.
 	TaskIdentifier string `json:"taskIdentifier,omitempty"`
 }
@@ -101,6 +196,9 @@ type UpdateRequirementRequest struct {
 	SystemType          string `json:"systemType"`
 	ContractName        string `json:"contractName"`
 	ContractTZFunctionID *uint  `json:"contractTZFunctionId"`
+	CompletedAt          *time.Time `json:"completedAt"`
+	DitOutgoingNumber    string     `json:"ditOutgoingNumber"`
+	DitOutgoingDate      *time.Time `json:"ditOutgoingDate"`
 	// TaskIdentifier — если передан, обновляет идентификатор (уникальность проверяется).
 	TaskIdentifier *string `json:"taskIdentifier,omitempty"`
 }
@@ -129,14 +227,6 @@ func extractQueueNumber(value string) (int, error) {
 	}
 
 	return num, nil
-}
-
-func normalizeRequirementSystemType(s string) string {
-	s = strings.TrimSpace(s)
-	if strings.EqualFold(s, "telephony") {
-		return "Телефония"
-	}
-	return s
 }
 
 func slugifyGKShortNameForTaskID(s string) string {
@@ -267,10 +357,7 @@ func (h *RequirementHandler) List(c *gin.Context) {
 		query = query.Where("is_archived = ?", false)
 	}
 
-	systemType := strings.TrimSpace(c.Query("systemType"))
-	if systemType != "" {
-		query = query.Where("system_type = ?", systemType)
-	}
+	query = applyRequirementListScope(query, c)
 
 	status := strings.TrimSpace(c.Query("status"))
 	if status != "" {
@@ -285,7 +372,9 @@ func (h *RequirementHandler) List(c *gin.Context) {
 	query = applyRequirementTextSearch(query, c.Query("search"))
 
 	if strings.TrimSpace(c.Query("noFunction")) == "true" {
-		query = query.Where("contract_tz_function_id IS NULL")
+		query = query.Where(
+			"TRIM(COALESCE(nmck_point_text, '')) = '' AND TRIM(COALESCE(tz_point_text, '')) = ''",
+		)
 	}
 
 	sortOrder := strings.ToLower(strings.TrimSpace(c.Query("sortOrder")))
@@ -294,6 +383,9 @@ func (h *RequirementHandler) List(c *gin.Context) {
 	} else {
 		query = query.Order("id desc")
 	}
+
+	// Узкий SELECT: без тяжёлых TEXT целиком — LEFT в БД (Postgres), без note/discussion в таблице.
+	query = applyRequirementListSQLSelect(query)
 
 	if err := query.Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения предложений"})
@@ -317,7 +409,10 @@ func (h *RequirementHandler) List(c *gin.Context) {
 	byLower := map[string]models.ContractDictionary{}
 	if len(lowerKeys) > 0 {
 		var contracts []models.ContractDictionary
-		if err := h.db.Where("LOWER(TRIM(name)) IN ?", lowerKeys).Find(&contracts).Error; err == nil {
+		if err := h.db.
+			Select("name", "short_name", "use_short_name_in_task_id").
+			Where("LOWER(TRIM(name)) IN ?", lowerKeys).
+			Find(&contracts).Error; err == nil {
 			for _, co := range contracts {
 				byLower[strings.ToLower(strings.TrimSpace(co.Name))] = co
 			}
@@ -412,6 +507,12 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		req.StatusText = "В обработку"
 	}
 
+	sys := normalizeRequirementSystemType(req.SystemType)
+	if err := validateRequirementSystemType(sys); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+
 	var taskIdentifier string
 	if tid := strings.TrimSpace(req.TaskIdentifier); tid != "" {
 		if err := h.ensureTaskIdentifierUnique(tid, 0); err != nil {
@@ -421,7 +522,7 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		taskIdentifier = tid
 	} else {
 		var err error
-		taskIdentifier, err = h.generateTaskIdentifier(normalizeRequirementSystemType(req.SystemType), strings.TrimSpace(req.ImplementationQueue), contractName, 0)
+		taskIdentifier, err = h.generateTaskIdentifier(sys, strings.TrimSpace(req.ImplementationQueue), contractName, 0)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Ошибка генерации идентификатора задачи"})
 			return
@@ -442,13 +543,26 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		TZPointText:         strings.TrimSpace(req.TZPointText),
 		NmckPointText:       strings.TrimSpace(req.NmckPointText),
 		StatusText:          strings.TrimSpace(req.StatusText),
-		SystemType:          normalizeRequirementSystemType(req.SystemType),
+		SystemType:          sys,
+		DitOutgoingNumber:   strings.TrimSpace(req.DitOutgoingNumber),
+		DitOutgoingDate:     req.DitOutgoingDate,
 		AuthorName:          userName,
 		AuthorOrg:           userOrg,
 		LastEditedBy:        userName,
 		LastEditedOrg:       userOrg,
 		ContractName:        contractName,
 		ContractTZFunctionID: req.ContractTZFunctionID,
+	}
+
+	if strings.TrimSpace(req.StatusText) == "Выполнено" {
+		if req.CompletedAt != nil {
+			item.CompletedAt = req.CompletedAt
+		} else {
+			t := time.Now()
+			item.CompletedAt = &t
+		}
+	} else if req.CompletedAt != nil {
+		item.CompletedAt = req.CompletedAt
 	}
 
 	// П.п. ТЗ и НМЦК из выбранной функции справочника.
@@ -473,15 +587,27 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 		return
 	}
 
-	contractName := strings.TrimSpace(req.ContractName)
-	if err := h.ensureContractExists(contractName); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка сохранения ГК"})
-		return
-	}
-
 	var item models.Requirement
 	if err := h.db.First(&item, c.Param("id")).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Предложение не найдено"})
+		return
+	}
+
+	var u *models.User
+	if raw, ok := c.Get("currentUser"); ok {
+		if typed, ok2 := raw.(*models.User); ok2 {
+			u = typed
+		}
+	}
+	fullEdit := u != nil && isFullRequirementEditor(u.IsSuperuser, u.AccessLevel)
+	if !fullEdit && u != nil {
+		g := middleware.DecodeRequirementGrantsJSON(u.RequirementFieldGrants)
+		req = mergeUpdateRequirementRequestWithGrants(item, req, g)
+	}
+
+	contractName := strings.TrimSpace(req.ContractName)
+	if err := h.ensureContractExists(contractName); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка сохранения ГК"})
 		return
 	}
 
@@ -495,6 +621,12 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 
 	if strings.TrimSpace(req.ImplementationQueue) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Выберите очередь"})
+		return
+	}
+
+	sys := normalizeRequirementSystemType(req.SystemType)
+	if err := validateRequirementSystemType(sys); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -516,7 +648,7 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 			}
 			item.TaskIdentifier = explicitTID
 		} else {
-			taskIdentifier, err := h.generateTaskIdentifier(normalizeRequirementSystemType(req.SystemType), newQueue, contractName, item.ID)
+			taskIdentifier, err := h.generateTaskIdentifier(sys, newQueue, contractName, item.ID)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"message": "Ошибка генерации идентификатора задачи"})
 				return
@@ -579,12 +711,23 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 		item.TZPointText = strings.TrimSpace(req.TZPointText)
 		item.NmckPointText = strings.TrimSpace(req.NmckPointText)
 	}
-	item.SystemType = normalizeRequirementSystemType(req.SystemType)
+	item.SystemType = sys
+	item.DitOutgoingNumber = strings.TrimSpace(req.DitOutgoingNumber)
+	item.DitOutgoingDate = req.DitOutgoingDate
 
+	oldStatus := strings.TrimSpace(item.StatusText)
 	if strings.TrimSpace(req.StatusText) == "" {
 		item.StatusText = "В обработку"
 	} else {
 		item.StatusText = strings.TrimSpace(req.StatusText)
+	}
+	newStatus := item.StatusText
+
+	if req.CompletedAt != nil {
+		item.CompletedAt = req.CompletedAt
+	} else if newStatus == "Выполнено" && oldStatus != "Выполнено" && item.CompletedAt == nil {
+		t := time.Now()
+		item.CompletedAt = &t
 	}
 
 	item.LastEditedBy = userName
@@ -807,10 +950,9 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 			statusText = "В обработку"
 		}
 
-		systemType := normalizeRequirementSystemType(getCellByHeader(row, headerMap, "Система"))
-		if systemType == "" {
-			systemType = "112"
-		}
+		systemCol := getCellByHeader(row, headerMap, "Система")
+		sectionFromFile := getCellByHeader(row, headerMap, "Условное разделение")
+		systemType, sectionName := parseImportSystemAndSection(systemCol, sectionFromFile)
 
 		contractName := getCellByHeader(row, headerMap, "ГК", "Контракт", "Государственный контракт")
 		if err := h.ensureContractExists(contractName); err != nil {
@@ -843,7 +985,7 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 			ShortName:           shortName,
 			Initiator:           getCellByHeader(row, headerMap, "Инициатор предложения"),
 			ResponsiblePerson:   responsiblePerson,
-			SectionName:         getCellByHeader(row, headerMap, "Условное разделение"),
+			SectionName:         sectionName,
 			ProposalText:        getCellByHeader(row, headerMap, "Предложение"),
 			ProblemComment:      getCellByHeader(row, headerMap, "Комментарии и описание проблем"),
 			DiscussionSummary:   getCellByHeader(row, headerMap, "Обсуждение"),
@@ -893,10 +1035,7 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 		query = query.Where("is_archived = ?", false)
 	}
 
-	systemType := strings.TrimSpace(c.Query("systemType"))
-	if systemType != "" {
-		query = query.Where("system_type = ?", systemType)
-	}
+	query = applyRequirementListScope(query, c)
 
 	status := strings.TrimSpace(c.Query("status"))
 	if status != "" {
@@ -911,7 +1050,9 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 	query = applyRequirementTextSearch(query, c.Query("search"))
 
 	if strings.TrimSpace(c.Query("noFunction")) == "true" {
-		query = query.Where("contract_tz_function_id IS NULL")
+		query = query.Where(
+			"TRIM(COALESCE(nmck_point_text, '')) = '' AND TRIM(COALESCE(tz_point_text, '')) = ''",
+		)
 	}
 
 	sortOrder := strings.ToLower(strings.TrimSpace(c.Query("sortOrder")))
@@ -941,13 +1082,17 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 		"Предложение",
 		"Комментарии и описание проблем",
 		"Обсуждение",
-		"Номер очереди при реализации",
+		"Приоритет (очередь)",
 		"Примечание",
 		"ГК",
 		"П.п. ТЗ",
 		"П.п. НМЦК",
 		"Статус",
 		"Система",
+		"Дата создания",
+		"Дата выполнения",
+		"Письмо в ДИТ — номер исходящего",
+		"Письмо в ДИТ — дата",
 	}
 
 	for i, header := range headers {
@@ -973,7 +1118,11 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 			item.TZPointText,
 			item.NmckPointText,
 			item.StatusText,
-			normalizeRequirementSystemType(item.SystemType),
+			item.SystemType,
+			item.CreatedAt.Format("02.01.2006 15:04"),
+			formatTimePtrForExcel(item.CompletedAt),
+			item.DitOutgoingNumber,
+			formatDatePtrForExcel(item.DitOutgoingDate),
 		}
 
 		for colIndex, value := range values {

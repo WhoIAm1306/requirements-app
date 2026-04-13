@@ -2,6 +2,8 @@
 backend/.env
 backend/app
 backend/*.exe
+# Локальные загрузки при запуске из backend/cmd/app (не коммитить бинарники)
+backend/cmd/app/uploads/
 
 # frontend
 frontend/node_modules

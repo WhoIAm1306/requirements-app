@@ -1,3 +1,4 @@
+// Package middleware — JWT и проверки прав (read / edit / superuser) для Gin.
 package middleware
 
 import (

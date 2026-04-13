@@ -1,10 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import LoginPage from '@/pages/LoginPage.vue'
-import RequirementsPage from '@/pages/RequirementsPage.vue'
-import AdminUsersPage from '@/pages/AdminUsersPage.vue'
-import GKDirectoryPage from '@/pages/GKDirectoryPage.vue'
 
-// Роутер приложения.
+/** Ленивая загрузка страниц — меньше JS при первом входе (кроме логина). */
+const LoginPage = () => import('@/pages/LoginPage.vue')
+const RequirementsPage = () => import('@/pages/RequirementsPage.vue')
+const AdminUsersPage = () => import('@/pages/AdminUsersPage.vue')
+const GKDirectoryPage = () => import('@/pages/GKDirectoryPage.vue')
+
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -20,8 +21,7 @@ const router = createRouter({
   ],
 })
 
-// Простой client-side guard.
-// Для MVP нам достаточно localStorage + роли из профиля.
+// Guard: токен в localStorage; админ-роуты только для isSuperuser из профиля.
 router.beforeEach((to) => {
   const token = localStorage.getItem('accessToken')
   const rawProfile = localStorage.getItem('profile')

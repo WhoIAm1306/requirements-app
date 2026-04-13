@@ -17,6 +17,35 @@ export const useAuthStore = defineStore('auth', () => {
   const email = computed(() => profile.value?.email || '')
   const isSuperuser = computed(() => Boolean(profile.value?.isSuperuser))
   const accessLevel = computed(() => profile.value?.accessLevel || 'read')
+  /** Добавление комментариев: edit/superuser или грант при read. */
+  const canCommentRequirements = computed(
+    () =>
+      Boolean(profile.value?.isSuperuser) ||
+      (profile.value?.accessLevel || 'read') === 'edit' ||
+      Boolean(profile.value?.requirementFieldGrants?.comment),
+  )
+
+  const canEditRequirementsFully = computed(
+    () => Boolean(profile.value?.isSuperuser) || (profile.value?.accessLevel || 'read') === 'edit',
+  )
+
+  /** Read + есть грант хотя бы на одно поле карточки (не только comment). */
+  const hasPartialRequirementFieldEdit = computed(() => {
+    if (canEditRequirementsFully.value) return false
+    if ((profile.value?.accessLevel || 'read') !== 'read') return false
+    const g = profile.value?.requirementFieldGrants
+    if (!g) return false
+    return Object.entries(g).some(([k, v]) => Boolean(v) && k !== 'comment')
+  })
+
+  const canManageRequirementCard = computed(
+    () => canEditRequirementsFully.value || hasPartialRequirementFieldEdit.value,
+  )
+
+  function canEditRequirementField(key: string): boolean {
+    if (canEditRequirementsFully.value) return true
+    return Boolean(profile.value?.requirementFieldGrants?.[key])
+  }
 
   // Установка сессии после логина.
   function setAuth(payload: LoginResponse) {
@@ -55,6 +84,11 @@ export const useAuthStore = defineStore('auth', () => {
     email,
     accessLevel,
     isSuperuser,
+    canCommentRequirements,
+    canEditRequirementsFully,
+    hasPartialRequirementFieldEdit,
+    canManageRequirementCard,
+    canEditRequirementField,
     setAuth,
     setProfile,
     logout,

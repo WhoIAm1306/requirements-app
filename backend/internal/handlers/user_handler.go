@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"requirements-app/backend/internal/models"
@@ -23,46 +25,71 @@ func NewUserHandler(db *gorm.DB) *UserHandler {
 
 // AdminUserResponse — DTO пользователя для административной панели.
 type AdminUserResponse struct {
-	ID           uint   `json:"id"`
-	FullName     string `json:"fullName"`
-	Organization string `json:"organization"`
-	Email        string `json:"email"`
-	AccessLevel  string `json:"accessLevel"`
-	IsSuperuser  bool   `json:"isSuperuser"`
-	IsActive     bool   `json:"isActive"`
-	CreatedAt    string `json:"createdAt"`
+	ID                     uint            `json:"id"`
+	FullName               string          `json:"fullName"`
+	Organization           string          `json:"organization"`
+	Email                  string          `json:"email"`
+	AccessLevel            string          `json:"accessLevel"`
+	IsSuperuser            bool            `json:"isSuperuser"`
+	IsActive               bool            `json:"isActive"`
+	RequirementFieldGrants map[string]bool `json:"requirementFieldGrants,omitempty"`
+	CreatedAt              string          `json:"createdAt"`
 }
 
 // CreateUserRequest — создание нового пользователя.
 type CreateUserRequest struct {
-	FullName     string `json:"fullName"`
-	Organization string `json:"organization"`
-	Email        string `json:"email"`
-	Password     string `json:"password"`
-	AccessLevel  string `json:"accessLevel"`
-	IsActive     bool   `json:"isActive"`
+	FullName               string          `json:"fullName"`
+	Organization           string          `json:"organization"`
+	Email                  string          `json:"email"`
+	Password               string          `json:"password"`
+	AccessLevel            string          `json:"accessLevel"`
+	IsActive               bool            `json:"isActive"`
+	RequirementFieldGrants map[string]bool `json:"requirementFieldGrants"`
 }
 
 // UpdateUserRequest — обновление существующего пользователя без смены пароля.
 type UpdateUserRequest struct {
-	FullName     string `json:"fullName"`
-	Organization string `json:"organization"`
-	Email        string `json:"email"`
-	AccessLevel  string `json:"accessLevel"`
-	IsActive     bool   `json:"isActive"`
+	FullName               string          `json:"fullName"`
+	Organization           string          `json:"organization"`
+	Email                  string          `json:"email"`
+	AccessLevel            string          `json:"accessLevel"`
+	IsActive               bool            `json:"isActive"`
+	RequirementFieldGrants map[string]bool `json:"requirementFieldGrants"`
+}
+
+func decodeUserGrantsJSON(raw string) map[string]bool {
+	out := map[string]bool{}
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "{}" {
+		return out
+	}
+	_ = json.Unmarshal([]byte(raw), &out)
+	return out
+}
+
+func encodeRequirementGrants(m map[string]bool) string {
+	if len(m) == 0 {
+		return "{}"
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
 
 // mapAdminUser переводит модель пользователя в DTO для admin UI.
 func mapAdminUser(user models.User) AdminUserResponse {
 	return AdminUserResponse{
-		ID:           user.ID,
-		FullName:     user.FullName,
-		Organization: user.Organization,
-		Email:        user.Email,
-		AccessLevel:  user.AccessLevel,
-		IsSuperuser:  user.IsSuperuser,
-		IsActive:     user.IsActive,
-		CreatedAt:    user.CreatedAt.Format("2006-01-02 15:04:05"),
+		ID:                     user.ID,
+		FullName:               user.FullName,
+		Organization:           user.Organization,
+		Email:                  user.Email,
+		AccessLevel:            user.AccessLevel,
+		IsSuperuser:            user.IsSuperuser,
+		IsActive:               user.IsActive,
+		RequirementFieldGrants: decodeUserGrantsJSON(user.RequirementFieldGrants),
+		CreatedAt:              user.CreatedAt.Format("2006-01-02 15:04:05"),
 	}
 }
 
@@ -129,12 +156,13 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	}
 
 	user := models.User{
-		FullName:     fullName,
-		Organization: organization,
-		Email:        email,
-		PasswordHash: string(passwordHash),
-		AccessLevel:  accessLevel,
-		IsActive:     req.IsActive,
+		FullName:               fullName,
+		Organization:           organization,
+		Email:                  email,
+		PasswordHash:           string(passwordHash),
+		AccessLevel:            accessLevel,
+		RequirementFieldGrants: encodeRequirementGrants(req.RequirementFieldGrants),
+		IsActive:               req.IsActive,
 	}
 
 	if err := h.db.Create(&user).Error; err != nil {
@@ -191,6 +219,9 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	user.Email = email
 	user.AccessLevel = accessLevel
 	user.IsActive = req.IsActive
+	if req.RequirementFieldGrants != nil {
+		user.RequirementFieldGrants = encodeRequirementGrants(req.RequirementFieldGrants)
+	}
 
 	if err := h.db.Save(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка обновления пользователя"})
@@ -198,4 +229,41 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, mapAdminUser(user))
+}
+
+// DeleteUser удаляет пользователя (нельзя удалить собственную учётную запись).
+func (h *UserHandler) DeleteUser(c *gin.Context) {
+	id, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 32)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный идентификатор"})
+		return
+	}
+
+	rawActor, ok := c.Get("userID")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "Не авторизован"})
+		return
+	}
+	actorID, ok := rawActor.(uint)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "Не авторизован"})
+		return
+	}
+	if actorID == uint(id) {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Нельзя удалить собственную учётную запись"})
+		return
+	}
+
+	var user models.User
+	if err := h.db.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Пользователь не найден"})
+		return
+	}
+
+	if err := h.db.Delete(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка удаления пользователя"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Пользователь удалён"})
 }

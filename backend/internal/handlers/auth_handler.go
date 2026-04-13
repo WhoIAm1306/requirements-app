@@ -1,6 +1,8 @@
+// Package handlers — HTTP-обработчики Gin (аутентификация, предложения, справочники, ГК).
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -34,13 +36,14 @@ type LoginRequest struct {
 
 // UserProfileResponse — безопасное представление пользователя на фронт.
 type UserProfileResponse struct {
-	ID           uint   `json:"id"`
-	FullName     string `json:"fullName"`
-	Organization string `json:"organization"`
-	Email        string `json:"email"`
-	AccessLevel  string `json:"accessLevel"`
-	IsSuperuser  bool   `json:"isSuperuser"`
-	IsActive     bool   `json:"isActive"`
+	ID                     uint            `json:"id"`
+	FullName               string          `json:"fullName"`
+	Organization           string          `json:"organization"`
+	Email                  string          `json:"email"`
+	AccessLevel            string          `json:"accessLevel"`
+	IsSuperuser            bool            `json:"isSuperuser"`
+	IsActive               bool            `json:"isActive"`
+	RequirementFieldGrants map[string]bool `json:"requirementFieldGrants,omitempty"`
 }
 
 // LoginResponse — ответ после логина.
@@ -75,16 +78,27 @@ func isAllowedAccessLevel(value string) bool {
 	}
 }
 
+func decodeRequirementGrantsJSON(raw string) map[string]bool {
+	out := map[string]bool{}
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "{}" {
+		return out
+	}
+	_ = json.Unmarshal([]byte(raw), &out)
+	return out
+}
+
 // userToProfile переводит модель пользователя в безопасный DTO.
 func userToProfile(user *models.User) UserProfileResponse {
 	return UserProfileResponse{
-		ID:           user.ID,
-		FullName:     user.FullName,
-		Organization: user.Organization,
-		Email:        user.Email,
-		AccessLevel:  user.AccessLevel,
-		IsSuperuser:  user.IsSuperuser,
-		IsActive:     user.IsActive,
+		ID:                     user.ID,
+		FullName:               user.FullName,
+		Organization:           user.Organization,
+		Email:                  user.Email,
+		AccessLevel:            user.AccessLevel,
+		IsSuperuser:            user.IsSuperuser,
+		IsActive:               user.IsActive,
+		RequirementFieldGrants: decodeRequirementGrantsJSON(user.RequirementFieldGrants),
 	}
 }
 

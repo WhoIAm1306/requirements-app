@@ -3,6 +3,9 @@
 export type Organization = 'ДИТ' | '112' | '101' | 'Танто-С'
 export type AccessLevel = 'read' | 'edit'
 
+/** Доп. права к карточке требования при accessLevel read (ключи — см. requirementFieldGrants.ts). */
+export type RequirementFieldGrants = Record<string, boolean | undefined>
+
 // Профиль текущего пользователя.
 export interface UserProfile {
   id: number
@@ -12,6 +15,7 @@ export interface UserProfile {
   accessLevel: AccessLevel
   isSuperuser: boolean
   isActive: boolean
+  requirementFieldGrants?: RequirementFieldGrants
 }
 
 // Логин по корпоративной почте.
@@ -41,6 +45,7 @@ export interface AdminUser {
   accessLevel: AccessLevel
   isSuperuser: boolean
   isActive: boolean
+  requirementFieldGrants?: RequirementFieldGrants
   createdAt: string
 }
 
@@ -52,6 +57,7 @@ export interface CreateAdminUserPayload {
   password: string
   accessLevel: AccessLevel
   isActive: boolean
+  requirementFieldGrants?: RequirementFieldGrants
 }
 
 // Обновление пользователя.
@@ -61,6 +67,7 @@ export interface UpdateAdminUserPayload {
   email: string
   accessLevel: AccessLevel
   isActive: boolean
+  requirementFieldGrants?: RequirementFieldGrants
 }
 
 // Элемент очереди.
@@ -206,6 +213,9 @@ export interface Requirement {
   nmckPointText?: string
   statusText: string
   systemType: string
+  completedAt?: string | null
+  ditOutgoingNumber?: string
+  ditOutgoingDate?: string | null
   authorName: string
   authorOrg: string
   createdAt: string
@@ -238,4 +248,7 @@ export interface RequirementPayload {
   nmckPointText: string
   statusText: string
   systemType: string
+  completedAt?: string | null
+  ditOutgoingNumber?: string
+  ditOutgoingDate?: string | null
 }

@@ -1,6 +1,9 @@
 import axios from 'axios'
 
-// Общий axios-клиент для всего приложения.
+/**
+ * Единый HTTP-клиент к `/api`: Bearer из localStorage, редирект на /login при 401.
+ * baseURL — VITE_API_BASE_URL или относительный `/api` за reverse-proxy.
+ */
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
 })

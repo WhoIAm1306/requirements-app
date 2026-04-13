@@ -1,3 +1,4 @@
+// Package config загружает переменные окружения и .env в структуру приложения.
 package config
 
 import (

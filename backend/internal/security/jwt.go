@@ -1,3 +1,4 @@
+// Package security — подпись и парсинг JWT для сессий API.
 package security
 
 import (

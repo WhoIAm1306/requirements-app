@@ -41,10 +41,19 @@
           </el-table-column>
           <el-table-column prop="createdAt" label="Создан" width="170" />
 
-          <el-table-column label="Действия" width="150" fixed="right">
+          <el-table-column label="Действия" width="240" fixed="right">
             <template #default="{ row }">
               <div class="row-actions">
                 <el-button size="small" @click="openEdit(row)">Редактировать</el-button>
+                <el-button
+                  v-if="!row.isSuperuser && row.id !== authStore.profile?.id"
+                  size="small"
+                  type="danger"
+                  plain
+                  @click="handleDeleteUser(row)"
+                >
+                  Удалить
+                </el-button>
               </div>
             </template>
           </el-table-column>
@@ -56,7 +65,7 @@
         v-model:loading="dialogLoading"
         :mode="dialogMode"
         :initial-user="selectedUser"
-        @saved="loadData"
+        @saved="onUserSaved"
       />
     </div>
   </div>
@@ -65,15 +74,18 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { fetchAdminUsers } from '@/api/adminUsers'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { deleteAdminUser, fetchAdminUsers } from '@/api/adminUsers'
+import { fetchMe } from '@/api/auth'
 import AdminUserDialog from '@/components/AdminUserDialog.vue'
+import { useAuthStore } from '@/stores/auth'
 import type { AdminUser } from '@/types'
 
 /**
  * Router нужен для возврата на страницу реестра.
  */
 const router = useRouter()
+const authStore = useAuthStore()
 
 /**
  * Список пользователей.
@@ -103,6 +115,18 @@ async function loadData() {
   }
 }
 
+async function onUserSaved() {
+  const editedId = selectedUser.value?.id
+  await loadData()
+  if (editedId != null && authStore.profile?.id === editedId) {
+    try {
+      authStore.setProfile(await fetchMe())
+    } catch {
+      /* сессия может быть недоступна — игнорируем */
+    }
+  }
+}
+
 /**
  * Открываем режим создания пользователя.
  */
@@ -119,6 +143,25 @@ function openEdit(user: AdminUser) {
   dialogMode.value = 'edit'
   selectedUser.value = user
   dialogVisible.value = true
+}
+
+async function handleDeleteUser(user: AdminUser) {
+  try {
+    await ElMessageBox.confirm(
+      `Удалить пользователя «${user.fullName}» (${user.email})? Вход под этой учётной записью станет невозможен.`,
+      'Удаление пользователя',
+      { type: 'warning', confirmButtonText: 'Удалить', cancelButtonText: 'Отмена' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await deleteAdminUser(user.id)
+    ElMessage.success('Пользователь удалён')
+    await loadData()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка удаления')
+  }
 }
 
 /**

@@ -1,3 +1,4 @@
+// SPA: Pinia, Vue Router, Element Plus (RU), корпоративные стили поверх темы EP.
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'

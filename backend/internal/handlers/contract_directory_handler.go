@@ -706,7 +706,7 @@ func (h *ContractDirectoryHandler) ListContractAttachments(c *gin.Context) {
 func isAllowedContractAttachmentExt(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
-	case ".docx", ".xls", ".xlsx", ".xlsm", ".doc", ".pdf":
+	case ".docx", ".xls", ".xlsx", ".xlsm", ".doc", ".pdf", ".msg", ".pst":
 		return true
 	default:
 		return false

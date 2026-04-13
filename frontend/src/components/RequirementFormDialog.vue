@@ -14,7 +14,7 @@
               clearable
               placeholder="Пусто — сгенерируется автоматически"
             />
-            <div class="field-hint">Формат зависит от очереди и настроек выбранной ГК.</div>
+            <div class="field-hint">Формат зависит от приоритета (очереди) и настроек выбранной ГК.</div>
           </el-form-item>
         </el-col>
 
@@ -50,8 +50,20 @@
         </el-col>
       </el-row>
 
-      <el-form-item label="Условное разделение">
-        <el-input v-model="form.sectionName" />
+      <el-form-item label="Раздел">
+        <el-select
+          v-model="form.sectionName"
+          style="width: 100%"
+          filterable
+          allow-create
+          default-first-option
+          placeholder="Например, Телефония или свой текст"
+        >
+          <el-option :label="TELEPHONY_SECTION" :value="TELEPHONY_SECTION" />
+        </el-select>
+        <div v-if="isTelephonySectionName(form.sectionName)" class="field-hint">
+          Для раздела «{{ TELEPHONY_SECTION }}» выберите систему 112 или 101 в поле «Система».
+        </div>
       </el-form-item>
 
       <el-form-item label="Предложение">
@@ -64,7 +76,7 @@
 
       <el-row :gutter="16">
         <el-col :span="16">
-          <el-form-item label="Номер очереди при реализации">
+          <el-form-item label="Приоритет">
             <el-select v-model="form.implementationQueue" style="width: 100%">
               <el-option
                 v-for="queue in queues"
@@ -187,6 +199,40 @@
         </el-col>
       </el-row>
 
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item label="Дата выполнения">
+            <el-date-picker
+              v-model="form.completedAt"
+              type="date"
+              style="width: 100%"
+              value-format="YYYY-MM-DDTHH:mm:ss.SSSZ"
+              clearable
+              placeholder="По умолчанию при статусе «Выполнено»"
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item label="Письмо в ДИТ — номер исходящего">
+            <el-input v-model="form.ditOutgoingNumber" clearable />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="Письмо в ДИТ — дата">
+            <el-date-picker
+              v-model="form.ditOutgoingDate"
+              type="date"
+              style="width: 100%"
+              value-format="YYYY-MM-DDTHH:mm:ss.SSSZ"
+              clearable
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
       <el-form-item label="Примечание">
         <el-input
           v-model="form.noteText"
@@ -217,6 +263,7 @@ import {
   STANDARD_REQUIREMENT_STATUSES,
 } from '@/constants/requirementStatuses'
 import { SYSTEM_TYPE_OPTIONS } from '@/constants/systemTypes'
+import { TELEPHONY_SECTION, isTelephonySectionName } from '@/constants/telephonySection'
 import { initiatorForSystemType } from '@/constants/initiatorBySystem'
 
 const props = defineProps<{
@@ -256,6 +303,9 @@ const emptyForm = (): RequirementPayload => ({
   statusText: DEFAULT_REQUIREMENT_STATUS,
   systemType: '112',
   contractName: '',
+  completedAt: null,
+  ditOutgoingNumber: '',
+  ditOutgoingDate: null,
 })
 
 const form = reactive<RequirementPayload>(emptyForm())
@@ -387,11 +437,22 @@ function handleFunctionSelected(functionId: number | null) {
 
 async function submit() {
   try {
+    if (!form.systemType || (form.systemType !== '112' && form.systemType !== '101')) {
+      ElMessage.warning('Выберите систему 112 или 101')
+      return
+    }
+    if (isTelephonySectionName(form.sectionName) && form.systemType !== '112' && form.systemType !== '101') {
+      ElMessage.warning('Для раздела «Телефония» укажите систему 112 или 101')
+      return
+    }
     loading.value = true
     const payload: RequirementPayload = { ...form }
     if (!(payload.taskIdentifier || '').trim()) {
       delete payload.taskIdentifier
     }
+    if (!payload.completedAt) delete payload.completedAt
+    if (!payload.ditOutgoingDate) delete payload.ditOutgoingDate
+    if (!(payload.ditOutgoingNumber || '').trim()) delete payload.ditOutgoingNumber
     await createRequirement(payload)
     ElMessage.success('Предложение создано')
     emit('saved')

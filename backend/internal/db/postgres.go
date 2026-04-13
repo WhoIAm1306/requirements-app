@@ -1,3 +1,4 @@
+// Package db — подключение к PostgreSQL, AutoMigrate и сиды (очереди, суперпользователь).
 package db
 
 import (
@@ -61,6 +62,17 @@ func NewPostgres(cfg *config.Config) (*gorm.DB, error) {
 	if err := seedSuperuser(database, cfg); err != nil {
 		return nil, err
 	}
+
+	// Миграция данных: старый system_type «Телефония» → раздел + система 112.
+	if res := database.Exec(`
+		UPDATE requirements
+		SET section_name = 'Телефония', system_type = '112'
+		WHERE LOWER(TRIM(COALESCE(system_type, ''))) IN ('телефония', 'telephony')
+		   OR TRIM(system_type) = 'Телефония'
+	`); res.Error != nil {
+		return nil, res.Error
+	}
+	_ = database.Exec(`UPDATE users SET requirement_field_grants = '{}'::jsonb WHERE requirement_field_grants IS NULL`)
 
 	log.Println("database connected and migrated")
 	return database, nil

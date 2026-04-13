@@ -95,31 +95,34 @@
           <div class="toolbar-left">
             <div class="main-filters">
               <el-button
-                :type="systemType === 'Телефония' ? 'primary' : 'default'"
-                @click="setSystem('Телефония')"
+                :type="listFilterPreset === 'all' ? 'primary' : 'default'"
+                @click="setListFilterPreset('all')"
               >
-                Телефония
+                Все
               </el-button>
-
               <el-button
-                :type="systemType === '112' ? 'primary' : 'default'"
-                @click="setSystem('112')"
+                :type="listFilterPreset === 'sys112' ? 'primary' : 'default'"
+                @click="setListFilterPreset('sys112')"
               >
                 Система 112
               </el-button>
-
               <el-button
-                :type="systemType === '101' ? 'primary' : 'default'"
-                @click="setSystem('101')"
+                :type="listFilterPreset === 'sys101' ? 'primary' : 'default'"
+                @click="setListFilterPreset('sys101')"
               >
                 Система 101
               </el-button>
-
               <el-button
-                :type="systemType === '' ? 'primary' : 'default'"
-                @click="setSystem('')"
+                :type="listFilterPreset === 'tel112' ? 'primary' : 'default'"
+                @click="setListFilterPreset('tel112')"
               >
-                Все
+                Телефония 112
+              </el-button>
+              <el-button
+                :type="listFilterPreset === 'tel101' ? 'primary' : 'default'"
+                @click="setListFilterPreset('tel101')"
+              >
+                Телефония 101
               </el-button>
 
               <el-tooltip content="Порядок списка по дате добавления записи (id)" placement="bottom">
@@ -134,17 +137,13 @@
             </div>
 
             <div class="search-row">
-              <el-tooltip
-                content="Поиск по подстроке: ГК, раздел, комментарии, обсуждение, примечание, п.п. ТЗ/НМЦК, статус, система, очередь, автор и редактор (ФИО, организация)"
-                placement="bottom"
-              >
-                <el-input
-                  v-model="search"
-                  placeholder="Поиск по всем полям карточки, включая ГК и примечание"
-                  clearable
-                  class="search-input"
-                />
-              </el-tooltip>
+              <el-input
+                v-model="search"
+                placeholder="Поиск по всем полям карточки, включая ГК и примечание"
+                clearable
+                class="search-input"
+                title="Поиск по подстроке: ГК, раздел, комментарии, обсуждение, примечание, п.п. ТЗ/НМЦК, статус, система, приоритет, автор и редактор"
+              />
 
               <el-select
                 v-model="status"
@@ -165,7 +164,7 @@
 
               <el-select
                 v-model="implementationQueue"
-                placeholder="Очередь"
+                placeholder="Приоритет"
                 clearable
                 class="queue-select"
               >
@@ -216,159 +215,174 @@
         </div>
       </el-card>
 
-      <!-- Таблица -->
+      <!-- Таблица: пагинация на клиенте — в DOM только текущая страница (быстрее, чем сотни строк) -->
       <el-card class="table-card" shadow="never">
-        <div
-          ref="tableHorizontalWrapRef"
-          class="table-horizontal-wrap"
-          @scroll="handleTableScroll"
-        >
-          <div class="table-width-box" :style="{ width: `${tableWidth}px` }">
-            <el-table
-              class="requirements-table"
-              :data="items"
-              v-loading="loading"
-              @row-click="handleRowClick"
-              row-key="id"
-              stripe
-              border
-              empty-text="Нет предложений по выбранным условиям"
-              :row-class-name="getRowClassName"
-              table-layout="fixed"
-              :fit="false"
-              :style="{ width: `${tableWidth}px` }"
-            >
-              <el-table-column prop="taskIdentifier" label="ID" width="150" />
+        <div class="table-stack">
+          <div
+            v-loading="loading"
+            class="table-horizontal-wrap"
+            element-loading-background="rgba(255, 255, 255, 0.72)"
+          >
+            <div class="table-width-box" :style="{ width: `${tableWidth}px` }">
+              <el-table
+                class="requirements-table"
+                :data="pagedItems"
+                @row-click="handleRowClick"
+                row-key="id"
+                stripe
+                border
+                empty-text="Нет предложений по выбранным условиям"
+                :row-class-name="getRowClassName"
+                table-layout="fixed"
+                :fit="false"
+                :style="{ width: `${tableWidth}px` }"
+              >
+                <el-table-column prop="taskIdentifier" label="ID" width="150" />
 
-              <el-table-column
-                prop="shortName"
-                label="Наименование"
-                width="330"
-                show-overflow-tooltip
-              />
+                <el-table-column
+                  prop="shortName"
+                  label="Наименование"
+                  width="330"
+                  show-overflow-tooltip
+                />
 
-              <el-table-column
-                prop="initiator"
-                label="Инициатор"
-                width="180"
-                show-overflow-tooltip
-              />
+                <el-table-column
+                  prop="initiator"
+                  label="Инициатор"
+                  width="180"
+                  show-overflow-tooltip
+                />
 
-              <el-table-column
-                prop="responsiblePerson"
-                label="Ответственный"
-                width="200"
-                show-overflow-tooltip
-              />
+                <el-table-column
+                  prop="responsiblePerson"
+                  label="Ответственный"
+                  width="200"
+                  show-overflow-tooltip
+                />
 
-              <el-table-column
-                prop="sectionName"
-                label="Раздел"
-                width="130"
-                show-overflow-tooltip
-              />
+                <el-table-column
+                  prop="sectionName"
+                  label="Раздел"
+                  width="130"
+                  show-overflow-tooltip
+                />
 
-              <el-table-column prop="implementationQueue" label="Очередь" width="120">
-                <template #default="{ row }">
-                  <QueueTag :queue="row.implementationQueue" />
-                </template>
-              </el-table-column>
+                <el-table-column prop="implementationQueue" label="Приоритет" width="120">
+                  <template #default="{ row }">
+                    <QueueTag :queue="row.implementationQueue" />
+                  </template>
+                </el-table-column>
 
-              <el-table-column label="ГК" width="190" show-overflow-tooltip>
-                <template #default="{ row }">
-                  <span class="gk-cell">
-                    {{ row.contractName || '—' }}
-                    <span
-                      v-if="row.contractUseShortNameInTaskId && (row.contractShortName || '').trim()"
-                      class="gk-short-hint"
-                    >
-                      ({{ row.contractShortName }})
+                <el-table-column label="ГК" width="190" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <span class="gk-cell">
+                      {{ row.contractName || '—' }}
+                      <span
+                        v-if="row.contractUseShortNameInTaskId && (row.contractShortName || '').trim()"
+                        class="gk-short-hint"
+                      >
+                        ({{ row.contractShortName }})
+                      </span>
                     </span>
-                  </span>
-                </template>
-              </el-table-column>
+                  </template>
+                </el-table-column>
 
-              <el-table-column label="Функция НМЦК, ТЗ" width="280" class-name="tz-col">
-                <template #default="{ row }">
-                  <button
-                    type="button"
-                    class="tz-cell-link"
-                    :disabled="!tzCellLabel(row)"
-                    :title="tzCellLabel(row) || undefined"
-                    @click.stop="openTzInfo(row)"
-                  >
-                    {{ tzCellLabel(row) || '—' }}
-                  </button>
-                </template>
-              </el-table-column>
+                <el-table-column label="Функция НМЦК, ТЗ" width="280" class-name="tz-col">
+                  <template #default="{ row }">
+                    <button
+                      type="button"
+                      class="tz-cell-link"
+                      :disabled="!tzCellLabel(row)"
+                      :title="tzCellLabel(row) || undefined"
+                      @click.stop="openTzInfo(row)"
+                    >
+                      {{ tzCellLabel(row) || '—' }}
+                    </button>
+                  </template>
+                </el-table-column>
 
-              <el-table-column prop="statusText" label="Статус" width="150">
-                <template #default="{ row }">
-                  <StatusTag :status="row.statusText" />
-                </template>
-              </el-table-column>
+                <el-table-column prop="statusText" label="Статус" width="150">
+                  <template #default="{ row }">
+                    <StatusTag :status="row.statusText" />
+                  </template>
+                </el-table-column>
 
-              <el-table-column label="Система" width="130">
-                <template #default="{ row }">
-                  {{ systemTypeLabel(row.systemType) }}
-                </template>
-              </el-table-column>
+                <el-table-column label="Система" width="130">
+                  <template #default="{ row }">
+                    {{ systemTypeLabel(row.systemType) }}
+                  </template>
+                </el-table-column>
 
-              <el-table-column label="Предложение" width="456">
-                <template #default="{ row }">
-                  <span class="cell-clamp" :title="row.proposalText">
-                    {{ shortText(row.proposalText, 90) }}
-                  </span>
-                </template>
-              </el-table-column>
+                <el-table-column label="Письмо в ДИТ" width="200" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    {{ ditLetterCell(row) }}
+                  </template>
+                </el-table-column>
 
-              <el-table-column label="Комментарии и описание проблем" width="400">
-                <template #default="{ row }">
-                  <span class="cell-clamp" :title="row.problemComment">
-                    {{ shortText(row.problemComment, 90) }}
-                  </span>
-                </template>
-              </el-table-column>
+                <el-table-column label="Предложение" width="520">
+                  <template #default="{ row }">
+                    <span class="cell-clamp" :title="row.proposalText">
+                      {{ shortText(row.proposalText, 90) }}
+                    </span>
+                  </template>
+                </el-table-column>
 
-              <el-table-column label="" width="64" align="center" class-name="row-menu-col">
-                <template #default="{ row }">
-                  <el-dropdown trigger="click" @command="(cmd: string) => handleRowMenuCommand(cmd, row)">
-                    <el-button size="small" circle class="row-menu-trigger" @click.stop>
-                      <el-icon class="row-menu-ellipsis"><MoreFilled /></el-icon>
-                    </el-button>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item command="open">Просмотр</el-dropdown-item>
-                        <template v-if="canEdit">
-                          <el-dropdown-item command="delete" divided>Удалить</el-dropdown-item>
-                          <el-dropdown-item v-if="!row.isArchived" command="archive">
-                            В архив
-                          </el-dropdown-item>
-                          <el-dropdown-item v-else command="restore">Восстановить</el-dropdown-item>
-                        </template>
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
-                </template>
-              </el-table-column>
-            </el-table>
+                <el-table-column label="Комментарии и описание проблем" width="400">
+                  <template #default="{ row }">
+                    <span class="cell-clamp" :title="row.problemComment">
+                      {{ shortText(row.problemComment, 90) }}
+                    </span>
+                  </template>
+                </el-table-column>
+
+                <el-table-column label="Дата создания" width="128">
+                  <template #default="{ row }">
+                    {{ formatTableDate(row.createdAt) }}
+                  </template>
+                </el-table-column>
+
+                <el-table-column label="Дата выполнения" width="128">
+                  <template #default="{ row }">
+                    {{ formatTableDate(row.completedAt) }}
+                  </template>
+                </el-table-column>
+
+                <el-table-column label="" width="64" align="center" class-name="row-menu-col">
+                  <template #default="{ row }">
+                    <el-dropdown trigger="click" @command="(cmd: string) => handleRowMenuCommand(cmd, row)">
+                      <el-button size="small" circle class="row-menu-trigger" @click.stop>
+                        <el-icon class="row-menu-ellipsis"><MoreFilled /></el-icon>
+                      </el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item command="open">Просмотр</el-dropdown-item>
+                          <template v-if="canEdit">
+                            <el-dropdown-item command="delete" divided>Удалить</el-dropdown-item>
+                            <el-dropdown-item v-if="!row.isArchived" command="archive">
+                              В архив
+                            </el-dropdown-item>
+                            <el-dropdown-item v-else command="restore">Восстановить</el-dropdown-item>
+                          </template>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </div>
+          <div v-if="items.length > 0" class="table-pagination">
+            <el-pagination
+              v-model:current-page="tablePage"
+              v-model:page-size="tablePageSize"
+              :page-sizes="[25, 50, 100, 200]"
+              layout="total, sizes, prev, pager, next, jumper"
+              :total="items.length"
+              background
+            />
           </div>
         </div>
       </el-card>
-
-      <!-- Плавающий нижний scrollbar -->
-      <div
-        v-show="showFloatingScrollbar"
-        ref="floatingScrollbarRef"
-        class="floating-horizontal-scroll"
-        :style="floatingScrollbarStyle"
-        @scroll="handleFloatingScrollbarScroll"
-      >
-        <div
-          class="floating-horizontal-scroll__inner"
-          :style="{ width: `${tableWidth}px` }"
-        ></div>
-      </div>
 
       <!-- Модалки -->
       <RequirementFormDialog
@@ -382,6 +396,7 @@
         v-model="detailsVisible"
         :requirement-id="selectedRequirementId"
         @updated="loadData"
+        @deleted="onRequirementDeletedFromDrawer"
       />
 
       <ImportExcelDialog
@@ -404,7 +419,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Close, MoreFilled } from '@element-plus/icons-vue'
@@ -413,11 +428,12 @@ import {
   archiveRequirement,
   deleteAllRequirements,
   deleteRequirement,
+  exportRequirementsFile,
   fetchRequirements,
   restoreRequirement,
 } from '@/api/requirements'
-import { exportRequirementsFile } from '@/api/export'
 import { fetchQueues } from '@/api/queues'
+import { debounce } from '@/utils/debounce'
 import { downloadRequirementsTemplate } from '@/utils/excelTemplates'
 import RequirementFormDialog from '@/components/RequirementFormDialog.vue'
 import RequirementDetailsDrawer from '@/components/RequirementDetailsDrawer.vue'
@@ -467,29 +483,31 @@ const archiveFilterMode = ref<'active' | 'all' | 'archived_only'>('active')
 /**
  * Основные данные таблицы и справочники.
  */
-const items = ref<Requirement[]>([])
+const items = shallowRef<Requirement[]>([])
 const queues = ref<QueueItem[]>([])
+
+/** Сумма ширин колонок (table-layout: fixed). */
+const tableWidth = 3300
+
+/** Клиентская пагинация: меньше узлов в DOM → отзывчивее интерфейс. */
+const tablePage = ref(1)
+const tablePageSize = ref(50)
+
+const pagedItems = computed(() => {
+  const list = items.value
+  const start = (tablePage.value - 1) * tablePageSize.value
+  return list.slice(start, start + tablePageSize.value)
+})
 
 /**
  * Фильтры списка.
  */
+type ListFilterPreset = 'all' | 'sys112' | 'sys101' | 'tel112' | 'tel101'
+
 const search = ref('')
 const status = ref('')
-const systemType = ref('')
+const listFilterPreset = ref<ListFilterPreset>('all')
 const implementationQueue = ref('')
-
-/**
- * DOM-ссылки для горизонтального скролла.
- */
-const tableHorizontalWrapRef = ref<HTMLElement | null>(null)
-const floatingScrollbarRef = ref<HTMLElement | null>(null)
-
-/**
- * Ширина таблицы = сумма ширин колонок.
- */
-/** Сумма фиксированных ширин колонок (table-layout: fixed). */
-/** Сумма width колонок таблицы (table-layout: fixed). */
-const tableWidth = 2780
 
 const filterNoFunction = ref(false)
 
@@ -500,6 +518,11 @@ let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 /** Счётчик запросов списка: отбрасываем устаревшие ответы при гонке поиска и фильтров. */
 let loadListSeq = 0
+
+/** Перезагрузка списка после смены фильтров без лишних запросов подряд */
+const debouncedReloadList = debounce(() => {
+  void loadData()
+}, 120)
 
 function clearSearchDebounce() {
   if (searchDebounceTimer) {
@@ -519,18 +542,6 @@ const userAvatarLetters = computed(() => {
 })
 
 /**
- * Состояние плавающего scrollbar.
- */
-const showFloatingScrollbar = ref(false)
-const floatingLeft = ref(0)
-const floatingWidth = ref(0)
-
-/**
- * Флаг против зацикливания scroll-событий.
- */
-let isSyncingScroll = false
-
-/**
  * Укорачиваем длинные тексты для таблицы.
  */
 function shortText(value: string, maxLength = 80) {
@@ -540,11 +551,61 @@ function shortText(value: string, maxLength = 80) {
   return text.slice(0, maxLength).trimEnd() + '...'
 }
 
-/**
- * Быстрый фильтр по системе.
- */
-function setSystem(value: string) {
-  systemType.value = value
+function listFilterQuery(): { systemType?: string; telephonySection?: 'true' | 'false' } {
+  switch (listFilterPreset.value) {
+    case 'all':
+      return {}
+    case 'sys112':
+      return { systemType: '112', telephonySection: 'false' }
+    case 'sys101':
+      return { systemType: '101', telephonySection: 'false' }
+    case 'tel112':
+      return { systemType: '112', telephonySection: 'true' }
+    case 'tel101':
+      return { systemType: '101', telephonySection: 'true' }
+  }
+}
+
+function setListFilterPreset(p: ListFilterPreset) {
+  listFilterPreset.value = p
+  clearSearchDebounce()
+  debouncedReloadList()
+}
+
+function formatTableDate(value: string | null | undefined) {
+  if (!value) return '—'
+  return new Date(value).toLocaleDateString('ru-RU')
+}
+
+function ditLetterCell(row: Requirement) {
+  const num = (row.ditOutgoingNumber || '').trim()
+  const d = row.ditOutgoingDate
+  if (!num && !d) return '—'
+  const dateStr = d ? new Date(d).toLocaleDateString('ru-RU') : ''
+  return [num && `№ ${num}`, dateStr].filter(Boolean).join(', ')
+}
+
+function exportFileBaseName() {
+  switch (listFilterPreset.value) {
+    case 'all':
+      return 'Все требования'
+    case 'sys112':
+      return 'Требования 112'
+    case 'sys101':
+      return 'Требования 101'
+    case 'tel112':
+      return 'Требования Телефония 112'
+    case 'tel101':
+      return 'Требования Телефония 101'
+  }
+}
+
+function buildExportFileName() {
+  const now = new Date()
+  const d = now.toLocaleDateString('ru-RU').replace(/\./g, '-')
+  const t = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }).replace(/:/g, '-')
+  const raw = `${exportFileBaseName()} - ${d} - ${t}.xlsx`
+  return raw.replace(/[/\\?%*:|"<>]/g, '-')
 }
 
 /**
@@ -553,11 +614,12 @@ function setSystem(value: string) {
 function resetFilters() {
   search.value = ''
   status.value = ''
-  systemType.value = ''
+  listFilterPreset.value = 'all'
   archiveFilterMode.value = 'active'
   implementationQueue.value = ''
   filterNoFunction.value = false
   listSortNewestFirst.value = true
+  tablePage.value = 1
   clearSearchDebounce()
   loadData()
 }
@@ -603,12 +665,12 @@ function archiveQueryParams() {
 
 async function loadData() {
   const seq = ++loadListSeq
+  loading.value = true
   try {
-    loading.value = true
-
     const arch = archiveQueryParams()
+    const lf = listFilterQuery()
     const data = await fetchRequirements({
-      systemType: systemType.value || undefined,
+      ...lf,
       status: status.value || undefined,
       search: search.value || undefined,
       implementationQueue: implementationQueue.value || undefined,
@@ -618,6 +680,8 @@ async function loadData() {
     })
     if (seq !== loadListSeq) return
     items.value = data
+    tablePage.value = 1
+    await nextTick()
   } catch (error: any) {
     if (seq !== loadListSeq) return
     ElMessage.error(error?.response?.data?.message || 'Ошибка загрузки')
@@ -632,8 +696,9 @@ async function loadData() {
 async function handleExport() {
   try {
     const arch = archiveQueryParams()
+    const lf = listFilterQuery()
     const blob = await exportRequirementsFile({
-      systemType: systemType.value || undefined,
+      ...lf,
       status: status.value || undefined,
       search: search.value || undefined,
       implementationQueue: implementationQueue.value || undefined,
@@ -642,10 +707,10 @@ async function handleExport() {
       ...arch,
     })
 
-    const url = window.URL.createObjectURL(new Blob([blob]))
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'requirements_export.xlsx'
+    link.download = buildExportFileName()
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -804,92 +869,30 @@ function handleRowMenuCommand(cmd: string, row: Requirement) {
   }
 }
 
-/**
- * Приглушаем архивные строки.
- */
 function getRowClassName({ row }: { row: Requirement }) {
   return row.isArchived ? 'archived-row' : ''
 }
 
-/**
- * Стиль плавающего scrollbar.
- */
-const floatingScrollbarStyle = computed(() => ({
-  left: `${floatingLeft.value}px`,
-  width: `${floatingWidth.value}px`,
-}))
-
-/**
- * Пересчитываем плавающий scrollbar.
- */
-function updateFloatingScrollbar() {
-  const wrap = tableHorizontalWrapRef.value
-  if (!wrap) {
-    showFloatingScrollbar.value = false
-    return
-  }
-
-  const rect = wrap.getBoundingClientRect()
-  const hasOverflow = tableWidth > wrap.clientWidth + 1
-  const isTableVisibleInViewport = rect.bottom > 80 && rect.top < window.innerHeight - 40
-
-  showFloatingScrollbar.value = hasOverflow && isTableVisibleInViewport
-  floatingLeft.value = rect.left
-  floatingWidth.value = rect.width
-
-  if (floatingScrollbarRef.value) {
-    floatingScrollbarRef.value.scrollLeft = wrap.scrollLeft
-  }
-}
-
-/**
- * Скролл таблицы -> двигаем плавающий scrollbar.
- */
-function handleTableScroll() {
-  const wrap = tableHorizontalWrapRef.value
-  const floating = floatingScrollbarRef.value
-  if (!wrap || !floating || isSyncingScroll) return
-
-  isSyncingScroll = true
-  floating.scrollLeft = wrap.scrollLeft
-
-  requestAnimationFrame(() => {
-    isSyncingScroll = false
-  })
-}
-
-/**
- * Скролл плавающего scrollbar -> двигаем таблицу.
- */
-function handleFloatingScrollbarScroll() {
-  const wrap = tableHorizontalWrapRef.value
-  const floating = floatingScrollbarRef.value
-  if (!wrap || !floating || isSyncingScroll) return
-
-  isSyncingScroll = true
-  wrap.scrollLeft = floating.scrollLeft
-
-  requestAnimationFrame(() => {
-    isSyncingScroll = false
-  })
-}
+watch(
+  () => [items.value.length, tablePageSize.value] as const,
+  () => {
+    const n = items.value.length
+    const maxPage = Math.max(1, Math.ceil(n / tablePageSize.value) || 1)
+    if (tablePage.value > maxPage) tablePage.value = maxPage
+  },
+)
 
 watch(
   [status, implementationQueue, archiveFilterMode, filterNoFunction],
   () => {
     clearSearchDebounce()
-    loadData()
+    debouncedReloadList()
   },
 )
 
-watch(systemType, () => {
-  clearSearchDebounce()
-  loadData()
-})
-
 watch(listSortNewestFirst, () => {
   clearSearchDebounce()
-  loadData()
+  debouncedReloadList()
 })
 
 watch(search, () => {
@@ -902,39 +905,13 @@ watch(search, () => {
 /**
  * Инициализация страницы.
  */
+function onRequirementDeletedFromDrawer() {
+  selectedRequirementId.value = null
+  void loadData()
+}
+
 onMounted(async () => {
-  await loadQueues()
-  await loadData()
-
-  await nextTick()
-  updateFloatingScrollbar()
-
-  window.addEventListener('resize', updateFloatingScrollbar)
-  window.addEventListener('scroll', updateFloatingScrollbar, { passive: true })
-})
-
-/**
- * После изменения таблицы пересчитываем scrollbar.
- */
-watch(items, async () => {
-  await nextTick()
-  updateFloatingScrollbar()
-})
-
-/**
- * После изменения очередей тоже пересчитываем scrollbar.
- */
-watch(queues, async () => {
-  await nextTick()
-  updateFloatingScrollbar()
-})
-
-/**
- * Чистим listeners.
- */
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', updateFloatingScrollbar)
-  window.removeEventListener('scroll', updateFloatingScrollbar)
+  await Promise.all([loadQueues(), loadData()])
 })
 </script>
 
@@ -946,14 +923,19 @@ onBeforeUnmount(() => {
   background: linear-gradient(165deg, #e8eef6 0%, #f2f5f9 40%, #edf1f7 100%);
   padding: 16px;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .page-shell {
   width: 100%;
   max-width: none;
   min-width: 0;
+  min-height: 0;
+  flex: 1;
   margin: 0;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
   overflow-x: hidden;
   box-sizing: border-box;
@@ -1166,11 +1148,125 @@ onBeforeUnmount(() => {
   border-radius: 20px;
   border: 1px solid #e7ecf3;
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
-  min-width: 0;
   box-sizing: border-box;
 }
 
+.toolbar-card {
+  min-width: 0;
+}
+
 .table-card {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-card :deep(.el-card__body) {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  box-sizing: border-box;
+}
+
+.table-stack {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  gap: 0;
+}
+
+.table-horizontal-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 280px;
+  overflow-x: auto;
+  overflow-y: visible;
+  box-sizing: border-box;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.table-horizontal-wrap::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.table-horizontal-wrap::-webkit-scrollbar-thumb {
+  background: rgba(130, 146, 168, 0.45);
+  border-radius: 6px;
+}
+
+.table-horizontal-wrap::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.55);
+}
+
+.table-pagination {
+  flex-shrink: 0;
+  padding-top: 12px;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.requirements-table {
+  width: 3300px;
+}
+
+.requirements-table :deep(td.tz-col) {
+  vertical-align: top;
+}
+
+.requirements-table :deep(td.tz-col .cell) {
+  white-space: normal !important;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.requirements-table :deep(th.el-table__cell) {
+  padding: 10px 8px;
+  font-size: 13px;
+  background: #f8fbff;
+}
+
+.requirements-table :deep(td.el-table__cell) {
+  padding: 8px 8px;
+  font-size: 13px;
+  vertical-align: top;
+}
+
+.requirements-table :deep(.el-table__inner-wrapper) {
+  overflow-x: hidden !important;
+}
+
+.requirements-table :deep(.el-table__body-wrapper) {
+  overflow-x: hidden !important;
+}
+
+.requirements-table :deep(.el-scrollbar__wrap) {
+  overflow-x: hidden !important;
+}
+
+.requirements-table :deep(.el-scrollbar__bar.is-horizontal) {
+  display: none !important;
+}
+
+.requirements-table :deep(.el-scrollbar__bar.is-vertical) {
+  opacity: 1 !important;
+  width: 8px;
+}
+
+.requirements-table :deep(.row-menu-col .cell) {
+  padding: 8px 4px;
   overflow: visible;
 }
 
@@ -1223,112 +1319,6 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-/*
-  Единственный реальный горизонтальный scroll-контейнер.
-*/
-.table-horizontal-wrap {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: visible;
-  box-sizing: border-box;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.table-horizontal-wrap::-webkit-scrollbar {
-  height: 0;
-}
-
-/*
-  Внутренний блок с шириной таблицы.
-*/
-.table-width-box {
-  width: 2880px;
-}
-
-/*
-  Таблица ровно на ширину колонок.
-*/
-.requirements-table {
-  width: 2880px;
-}
-
-.requirements-table :deep(td.tz-col) {
-  vertical-align: top;
-}
-
-.requirements-table :deep(td.tz-col .cell) {
-  white-space: normal !important;
-  word-break: break-word;
-  line-height: 1.4;
-}
-
-.requirements-table :deep(th.el-table__cell) {
-  padding: 10px 8px;
-  font-size: 13px;
-}
-
-.requirements-table :deep(td.el-table__cell) {
-  padding: 8px 8px;
-  font-size: 13px;
-  vertical-align: top;
-}
-
-/*
-  Закрепляем заголовки таблицы.
-  Теперь шапка остаётся видимой при вертикальной прокрутке страницы.
-*/
-.requirements-table :deep(.el-table__header-wrapper) {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  box-shadow: 0 1px 0 #edf1f7;
-}
-
-.requirements-table :deep(.el-table__header-wrapper th.el-table__cell) {
-  background: #f8fbff;
-}
-
-/*
-  Убираем родной нижний горизонтальный scrollbar Element Plus.
-*/
-.requirements-table :deep(.el-scrollbar__bar.is-horizontal) {
-  display: none !important;
-}
-
-.floating-horizontal-scroll {
-  position: fixed;
-  bottom: 10px;
-  z-index: 200;
-  height: 14px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid #dfe7f3;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
-  scrollbar-width: thin;
-}
-
-.floating-horizontal-scroll__inner {
-  height: 1px;
-}
-
-.floating-horizontal-scroll::-webkit-scrollbar {
-  height: 12px;
-}
-
-.floating-horizontal-scroll::-webkit-scrollbar-thumb {
-  background: rgba(130, 146, 168, 0.55);
-  border-radius: 999px;
-}
-
-.floating-horizontal-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 .cell-clamp {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1336,11 +1326,6 @@ onBeforeUnmount(() => {
   overflow: hidden;
   line-height: 1.35;
   word-break: break-word;
-}
-
-.requirements-table :deep(.row-menu-col .cell) {
-  padding: 8px 4px;
-  overflow: visible;
 }
 
 .row-menu-trigger {

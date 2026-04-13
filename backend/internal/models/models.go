@@ -1,3 +1,4 @@
+// Package models — доменные сущности БД и DTO для JSON API (теги gorm/json).
 package models
 
 import (
@@ -28,7 +29,13 @@ type Requirement struct {
 	// NmckPointText — п.п. НМЦК (вручную или номер по НМЦК из функции).
 	NmckPointText string `gorm:"type:text" json:"nmckPointText"`
 	StatusText          string     `gorm:"size:100" json:"statusText"`
+	// SystemType — только «112» или «101»; раздел «Телефония» задаётся в SectionName.
 	SystemType          string     `gorm:"size:50;index" json:"systemType"`
+	// CompletedAt — дата выполнения (автоматически при первом переводе в «Выполнено», можно править вручную).
+	CompletedAt *time.Time `json:"completedAt"`
+	// DitOutgoingNumber / DitOutgoingDate — письмо в ДИТ (исходящий номер и дата).
+	DitOutgoingNumber string     `gorm:"size:255" json:"ditOutgoingNumber"`
+	DitOutgoingDate   *time.Time `json:"ditOutgoingDate"`
 	AuthorName          string     `gorm:"size:255" json:"authorName"`
 	AuthorOrg           string     `gorm:"size:50" json:"authorOrg"`
 	CreatedAt           time.Time  `json:"createdAt"`
@@ -170,9 +177,11 @@ type User struct {
 	Organization string    `gorm:"size:50" json:"organization"`
 	Email        string    `gorm:"size:255;uniqueIndex" json:"email"`
 	PasswordHash string    `gorm:"size:255" json:"-"`
-	AccessLevel  string    `gorm:"size:20" json:"accessLevel"` // read / edit
-	IsSuperuser  bool      `gorm:"default:false" json:"isSuperuser"`
-	IsActive     bool      `gorm:"default:true" json:"isActive"`
+	AccessLevel  string `gorm:"size:20" json:"accessLevel"` // read / edit
+	// RequirementFieldGrants — JSON-объект флагов (comment, shortName, attachments, …) при access read.
+	RequirementFieldGrants string `gorm:"type:jsonb;default:'{}'" json:"requirementFieldGrants"`
+	IsSuperuser            bool   `gorm:"default:false" json:"isSuperuser"`
+	IsActive               bool   `gorm:"default:true" json:"isActive"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 }

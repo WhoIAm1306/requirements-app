@@ -19,6 +19,12 @@ export async function updateAdminUser(id: number, payload: UpdateAdminUserPayloa
   return data
 }
 
+// Удаление пользователя (суперпользователь).
+export async function deleteAdminUser(id: number) {
+  const { data } = await apiClient.delete<{ message: string }>(`/admin/users/${id}`)
+  return data
+}
+
 // Смена пароля выбранного пользователя администратором.
 export async function changeAdminUserPassword(id: number, newPassword: string) {
   const { data } = await apiClient.post<{ message: string }>(`/admin/users/${id}/change-password`, {

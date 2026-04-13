@@ -1,5 +1,6 @@
 <template>
   <el-drawer
+    class="requirement-details-drawer"
     :model-value="modelValue"
     size="920px"
     :title="drawerTitle"
@@ -7,46 +8,74 @@
   >
     <div v-loading="loading" class="drawer-body">
       <template v-if="item">
-        <!--
-          Верхняя панель карточки.
-          Для read-only пользователя здесь нет кнопок изменения.
-        -->
-        <div class="top-bar">
-          <div class="meta-block">
-            <div class="meta-line"><span class="meta-label">ID:</span> {{ item.taskIdentifier }}</div>
-            <div class="meta-line"><span class="meta-label">Автор:</span> {{ item.authorName }}</div>
-            <div class="meta-line"><span class="meta-label">Организация автора:</span> {{ item.authorOrg }}</div>
-            <div class="meta-line"><span class="meta-label">Создано:</span> {{ formatDateTime(item.createdAt) }}</div>
-            <div class="meta-line">
-              <span class="meta-label">Последние изменения внес:</span>
-              {{ item.lastEditedBy || '—' }}
-              — {{ item.lastEditedOrg || '—' }}
-              — {{ formatDateTime(item.updatedAt) }}
+        <div class="drawer-top-sticky">
+          <div class="top-bar">
+            <div class="meta-block">
+              <div class="meta-line"><span class="meta-label">ID:</span> {{ item.taskIdentifier }}</div>
+              <div class="meta-line"><span class="meta-label">Автор:</span> {{ item.authorName }}</div>
+              <div class="meta-line"><span class="meta-label">Организация автора:</span> {{ item.authorOrg }}</div>
+              <div class="meta-line">
+                <span class="meta-label">Последние изменения внес:</span>
+                {{ item.lastEditedBy || '—' }}
+                — {{ item.lastEditedOrg || '—' }}
+                — {{ formatDateTime(item.updatedAt) }}
+              </div>
+              <div class="meta-line">
+                <span class="meta-label">Дата создания:</span>
+                {{ formatDateOnly(item.createdAt) }}
+              </div>
+              <div class="meta-line">
+                <span class="meta-label">Дата выполнения:</span>
+                {{ item.completedAt ? formatDateOnly(item.completedAt) : '—' }}
+              </div>
             </div>
-          </div>
 
-          <div v-if="canEdit" class="top-actions">
-            <el-button type="primary" :loading="saveLoading" @click="handleSave">
-              Сохранить
-            </el-button>
+            <div class="top-actions-grid">
+              <el-button
+                v-if="canManageRequirementCard"
+                class="top-btn-save"
+                type="primary"
+                :loading="saveLoading"
+                @click="handleSave"
+              >
+                Сохранить
+              </el-button>
 
-            <el-button
-              v-if="!item.isArchived"
-              type="warning"
-              :loading="actionLoading"
-              @click="handleArchive"
-            >
-              В архив
-            </el-button>
+              <template v-if="canFullEdit">
+                <el-button
+                  v-if="!item.isArchived"
+                  class="top-btn-secondary"
+                  type="warning"
+                  :loading="actionLoading"
+                  @click="handleArchive"
+                >
+                  В архив
+                </el-button>
 
-            <el-button
-              v-else
-              type="success"
-              :loading="actionLoading"
-              @click="handleRestore"
-            >
-              Восстановить
-            </el-button>
+                <el-button
+                  v-else
+                  class="top-btn-secondary"
+                  type="success"
+                  :loading="actionLoading"
+                  @click="handleRestore"
+                >
+                  Восстановить
+                </el-button>
+
+                <el-tooltip content="Удалить" placement="bottom">
+                  <el-button
+                    class="top-btn-delete"
+                    type="danger"
+                    plain
+                    size="small"
+                    :icon="Delete"
+                    :loading="deleteLoading"
+                    circle
+                    @click="handleDeleteRequirement"
+                  />
+                </el-tooltip>
+              </template>
+            </div>
           </div>
         </div>
 
@@ -56,42 +85,66 @@
           Режим редактирования:
           поля доступны только пользователю с правом edit / superuser.
         -->
-        <template v-if="canEdit">
+        <template v-if="canManageRequirementCard">
           <el-form label-position="top" class="details-form">
             <el-row :gutter="16">
               <el-col :span="24">
                 <el-form-item label="Идентификатор задачи">
-                  <el-input v-model="form.taskIdentifier" placeholder="Уникальный идентификатор" />
+                  <el-input
+                    v-model="form.taskIdentifier"
+                    placeholder="Уникальный идентификатор"
+                    :disabled="!canFullEdit"
+                  />
                 </el-form-item>
               </el-col>
 
               <el-col :span="12">
                 <el-form-item label="Краткое наименование предложения">
-                  <el-input v-model="form.shortName" />
+                  <el-input v-model="form.shortName" :disabled="fieldDisabled('shortName')" />
                 </el-form-item>
               </el-col>
 
               <el-col :span="12">
                 <el-form-item label="Инициатор">
-                  <el-input v-model="form.initiator" />
+                  <el-input v-model="form.initiator" :disabled="fieldDisabled('initiator')" />
                 </el-form-item>
               </el-col>
 
               <el-col :span="12">
                 <el-form-item label="Ответственный">
-                  <el-input v-model="form.responsiblePerson" />
+                  <el-input
+                    v-model="form.responsiblePerson"
+                    :disabled="fieldDisabled('responsiblePerson')"
+                  />
                 </el-form-item>
               </el-col>
 
               <el-col :span="12">
                 <el-form-item label="Раздел">
-                  <el-input v-model="form.sectionName" />
+                  <el-select
+                    v-model="form.sectionName"
+                    style="width: 100%"
+                    filterable
+                    allow-create
+                    default-first-option
+                    placeholder="Например, Телефония или свой текст"
+                    :disabled="fieldDisabled('sectionName')"
+                  >
+                    <el-option :label="TELEPHONY_SECTION" :value="TELEPHONY_SECTION" />
+                  </el-select>
+                  <div v-if="isTelephonySectionName(form.sectionName)" class="field-hint">
+                    Для раздела «{{ TELEPHONY_SECTION }}» выберите систему 112 или 101 в поле «Система».
+                  </div>
                 </el-form-item>
               </el-col>
 
               <el-col :span="12">
-                <el-form-item label="Очередь">
-                  <el-select v-model="form.implementationQueue" style="width: 100%">
+                <el-form-item label="Приоритет">
+                  <el-select
+                    v-model="form.implementationQueue"
+                    style="width: 100%"
+                    :disabled="fieldDisabled('implementationQueue')"
+                  >
                     <el-option
                       v-for="queue in queues"
                       :key="queue.id"
@@ -112,6 +165,7 @@
                     allow-create
                     default-first-option
                     clearable
+                    :disabled="fieldDisabled('contractGk')"
                     @change="onContractChange"
                   >
                     <el-option
@@ -135,6 +189,7 @@
                     filterable
                     allow-create
                     default-first-option
+                    :disabled="fieldDisabled('statusText')"
                   >
                     <el-option
                       v-for="s in STANDARD_REQUIREMENT_STATUSES"
@@ -148,7 +203,12 @@
 
               <el-col :span="12">
                 <el-form-item label="Система">
-                  <el-select v-model="form.systemType" style="width: 100%" @change="onSystemTypeChange">
+                  <el-select
+                    v-model="form.systemType"
+                    style="width: 100%"
+                    :disabled="fieldDisabled('systemType')"
+                    @change="onSystemTypeChange"
+                  >
                     <el-option
                       v-for="opt in SYSTEM_TYPE_OPTIONS"
                       :key="opt.value"
@@ -161,19 +221,37 @@
 
               <el-col :span="24">
                 <el-form-item label="Предложение">
-                  <el-input v-model="form.proposalText" type="textarea" :rows="4" />
+                  <el-input
+                    v-model="form.proposalText"
+                    type="textarea"
+                    :autosize="{ minRows: 4, maxRows: 16 }"
+                    :disabled="fieldDisabled('proposalText')"
+                    class="drawer-textarea-tall"
+                  />
                 </el-form-item>
               </el-col>
 
               <el-col :span="24">
                 <el-form-item label="Комментарии и описание проблем">
-                  <el-input v-model="form.problemComment" type="textarea" :rows="4" />
+                  <el-input
+                    v-model="form.problemComment"
+                    type="textarea"
+                    :autosize="{ minRows: 4, maxRows: 16 }"
+                    :disabled="fieldDisabled('problemComment')"
+                    class="drawer-textarea-tall"
+                  />
                 </el-form-item>
               </el-col>
 
               <el-col :span="24">
                 <el-form-item label="Обсуждение">
-                  <el-input v-model="form.discussionSummary" type="textarea" :rows="4" />
+                  <el-input
+                    v-model="form.discussionSummary"
+                    type="textarea"
+                    :autosize="{ minRows: 4, maxRows: 16 }"
+                    :disabled="fieldDisabled('discussionSummary')"
+                    class="drawer-textarea-tall"
+                  />
                 </el-form-item>
               </el-col>
 
@@ -185,7 +263,7 @@
                     v-model="selectedStageNumber"
                     placeholder="Сначала выберите ГК"
                     style="width: 100%"
-                    :disabled="!selectedContractId"
+                    :disabled="!selectedContractId || fieldDisabled('contractGk')"
                     filterable
                     @change="handleStageChange"
                   >
@@ -208,7 +286,7 @@
                         v-model="selectedFunctionId"
                         placeholder="Сначала выберите этап"
                         style="width: 100%"
-                        :disabled="!selectedStageNumber"
+                        :disabled="!selectedStageNumber || fieldDisabled('contractGk')"
                         filterable
                         clearable
                         @change="handleFunctionSelected"
@@ -248,6 +326,43 @@
                     v-model="form.noteText"
                     type="textarea"
                     :autosize="{ minRows: 3, maxRows: 12 }"
+                    :disabled="fieldDisabled('noteText')"
+                  />
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="12">
+                <el-form-item label="Дата выполнения">
+                  <el-date-picker
+                    v-model="form.completedAt"
+                    type="date"
+                    style="width: 100%"
+                    value-format="YYYY-MM-DDTHH:mm:ss.SSSZ"
+                    clearable
+                    placeholder="По умолчанию при статусе «Выполнено»"
+                    :disabled="fieldDisabled('completedAt')"
+                  />
+                </el-form-item>
+              </el-col>
+
+              <el-col :span="12">
+                <el-form-item label="Письмо в ДИТ — номер исходящего">
+                  <el-input
+                    v-model="form.ditOutgoingNumber"
+                    clearable
+                    :disabled="fieldDisabled('ditOutgoing')"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="Письмо в ДИТ — дата">
+                  <el-date-picker
+                    v-model="form.ditOutgoingDate"
+                    type="date"
+                    style="width: 100%"
+                    value-format="YYYY-MM-DDTHH:mm:ss.SSSZ"
+                    clearable
+                    :disabled="fieldDisabled('ditOutgoing')"
                   />
                 </el-form-item>
               </el-col>
@@ -282,7 +397,7 @@
             </div>
 
             <div class="readonly-card">
-              <div class="readonly-label">Очередь</div>
+              <div class="readonly-label">Приоритет</div>
               <div class="readonly-value">{{ item.implementationQueue || '—' }}</div>
             </div>
 
@@ -335,6 +450,30 @@
               <div class="readonly-label">Примечание</div>
               <div class="readonly-value">{{ item.noteText || '—' }}</div>
             </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">Письмо в ДИТ — номер</div>
+              <div class="readonly-value">{{ item.ditOutgoingNumber?.trim() || '—' }}</div>
+            </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">Письмо в ДИТ — дата</div>
+              <div class="readonly-value">
+                {{ item.ditOutgoingDate ? formatDateOnly(item.ditOutgoingDate) : '—' }}
+              </div>
+            </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">Дата создания</div>
+              <div class="readonly-value">{{ formatDateOnly(item.createdAt) }}</div>
+            </div>
+
+            <div class="readonly-card">
+              <div class="readonly-label">Дата выполнения</div>
+              <div class="readonly-value">
+                {{ item.completedAt ? formatDateOnly(item.completedAt) : '—' }}
+              </div>
+            </div>
           </div>
         </template>
 
@@ -355,7 +494,7 @@
               <span class="attachment-meta">{{ formatDateTime(att.createdAt) }}</span>
               <el-button size="small" @click="downloadAttachment(att)">Скачать</el-button>
               <el-button
-                v-if="canEdit"
+                v-if="canEditAttachments"
                 size="small"
                 type="danger"
                 link
@@ -367,22 +506,22 @@
             </div>
           </div>
 
-          <template v-if="canEdit">
+          <template v-if="canEditAttachments">
             <div class="attachments-toolbar">
               <input
                 ref="reqFileInputRef"
                 type="file"
                 multiple
                 class="visually-hidden"
-                accept=".docx,.xls,.xlsx,.xlsm,.doc,.pdf"
+                accept=".docx,.xls,.xlsx,.xlsm,.doc,.pdf,.msg,.pst"
                 @change="onReqAttachmentFilesPicked"
               />
               <el-button :loading="attachmentsUploading" @click="triggerReqAttachmentFilePick">
                 Загрузить файлы
               </el-button>
               <span class="attachments-hint">
-                Допустимые форматы: doc, docx, pdf, xls, xlsx, xlsm. Загруженные файлы сохраняются в общую
-                библиотеку — их можно снова прикрепить к другим предложениям.
+                Допустимые форматы: doc, docx, pdf, xls, xlsx, xlsm, msg, pst. Загруженные файлы сохраняются в
+                общую библиотеку — их можно снова прикрепить к другим предложениям.
               </span>
             </div>
 
@@ -435,10 +574,7 @@
           </div>
         </div>
 
-        <!--
-          Добавление нового комментария доступно только edit-пользователю.
-        -->
-        <div v-if="canEdit" class="comment-editor">
+        <div v-if="canAddRequirementComment" class="comment-editor">
           <el-input
             v-model="newCommentText"
             type="textarea"
@@ -457,6 +593,7 @@
 </template>
 
 <script setup lang="ts">
+import { Delete } from '@element-plus/icons-vue'
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
@@ -467,6 +604,7 @@ import {
   addRequirementComment,
   archiveRequirement,
   attachRequirementFromLibrary,
+  deleteRequirement,
   deleteRequirementAttachment,
   downloadRequirementAttachment,
   fetchRequirementAttachmentLibrary,
@@ -488,6 +626,7 @@ import type {
 import { STANDARD_REQUIREMENT_STATUSES } from '@/constants/requirementStatuses'
 import { initiatorForSystemType } from '@/constants/initiatorBySystem'
 import { SYSTEM_TYPE_OPTIONS, systemTypeLabel } from '@/constants/systemTypes'
+import { TELEPHONY_SECTION, isTelephonySectionName } from '@/constants/telephonySection'
 
 /**
  * Props drawer.
@@ -503,6 +642,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
   (e: 'updated'): void
+  (e: 'deleted'): void
 }>()
 
 /**
@@ -510,10 +650,20 @@ const emit = defineEmits<{
  */
 const authStore = useAuthStore()
 
-/**
- * Пользователь может редактировать только если у него edit или superuser.
- */
-const canEdit = computed(() => authStore.isSuperuser || authStore.accessLevel === 'edit')
+const canFullEdit = computed(() => authStore.canEditRequirementsFully)
+const canManageRequirementCard = computed(() => authStore.canManageRequirementCard)
+
+function fieldDisabled(key: string) {
+  return !authStore.canEditRequirementField(key)
+}
+
+const canEditAttachments = computed(
+  () => canFullEdit.value || authStore.canEditRequirementField('attachments'),
+)
+
+const canAddRequirementComment = computed(
+  () => canFullEdit.value || authStore.canCommentRequirements,
+)
 
 /**
  * Заголовок drawer.
@@ -530,6 +680,7 @@ const drawerTitle = computed(() => {
 const loading = ref(false)
 const saveLoading = ref(false)
 const actionLoading = ref(false)
+const deleteLoading = ref(false)
 const commentLoading = ref(false)
 
 /**
@@ -575,6 +726,9 @@ const form = reactive<RequirementPayload>({
   nmckPointText: '',
   statusText: '',
   systemType: '',
+  completedAt: null,
+  ditOutgoingNumber: '',
+  ditOutgoingDate: null,
 })
 
 const contractSelectOptions = computed(() => {
@@ -624,6 +778,9 @@ function fillForm(data: Requirement) {
   form.nmckPointText = data.nmckPointText || ''
   form.statusText = data.statusText || ''
   form.systemType = data.systemType || ''
+  form.completedAt = data.completedAt ?? null
+  form.ditOutgoingNumber = data.ditOutgoingNumber || ''
+  form.ditOutgoingDate = data.ditOutgoingDate ?? null
 }
 
 function onSystemTypeChange() {
@@ -754,7 +911,11 @@ async function handleSave() {
 
   try {
     saveLoading.value = true
-    await updateRequirement(item.value.id, { ...form })
+    const payload: RequirementPayload = { ...form }
+    if (!payload.completedAt) delete payload.completedAt
+    if (!payload.ditOutgoingDate) delete payload.ditOutgoingDate
+    if (!(payload.ditOutgoingNumber || '').trim()) delete payload.ditOutgoingNumber
+    await updateRequirement(item.value.id, payload)
     ElMessage.success('Изменения сохранены')
     await loadItem()
     emit('updated')
@@ -800,6 +961,31 @@ async function handleRestore() {
     ElMessage.error(error?.response?.data?.message || 'Ошибка восстановления')
   } finally {
     actionLoading.value = false
+  }
+}
+
+async function handleDeleteRequirement() {
+  if (!item.value) return
+  try {
+    await ElMessageBox.confirm(
+      'Удалить запись? Она исчезнет из списков. Это не архив.',
+      'Удаление предложения',
+      { type: 'warning', confirmButtonText: 'Удалить', cancelButtonText: 'Отмена' },
+    )
+  } catch {
+    return
+  }
+  try {
+    deleteLoading.value = true
+    await deleteRequirement(item.value.id)
+    ElMessage.success('Запись удалена')
+    emit('deleted')
+    emit('update:modelValue', false)
+    emit('updated')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка удаления')
+  } finally {
+    deleteLoading.value = false
   }
 }
 
@@ -958,6 +1144,11 @@ function formatDateTime(value: string) {
   return new Date(value).toLocaleString('ru-RU')
 }
 
+function formatDateOnly(value: string | undefined) {
+  if (!value) return '—'
+  return new Date(value).toLocaleDateString('ru-RU')
+}
+
 /**
  * При открытии drawer и смене id загружаем данные.
  */
@@ -979,6 +1170,18 @@ watch(
 .drawer-body {
   display: grid;
   gap: 16px;
+  padding: 0 20px 20px;
+}
+
+.drawer-top-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: 0 -20px;
+  padding: 0 20px 10px;
+  background-color: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  box-shadow: 0 1px 0 rgba(26, 35, 50, 0.04);
 }
 
 .top-bar {
@@ -986,6 +1189,8 @@ watch(
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
+  position: relative;
+  min-height: 148px;
 }
 
 .meta-block {
@@ -1002,10 +1207,45 @@ watch(
   font-weight: 700;
 }
 
-.top-actions {
-  display: flex;
+.top-actions-grid {
+  display: grid;
+  grid-template-columns: auto auto;
   gap: 8px;
-  flex-wrap: wrap;
+  margin-left: auto;
+  align-self: start;
+}
+
+/* EP: .el-button + .el-button { margin-left: 12px } — из‑за этого «Удалить» съезжает вправо относительно «Сохранить» */
+.top-actions-grid :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.top-btn-save {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.top-btn-secondary {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.top-btn-delete {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+}
+
+/* Нет «Сохранить» — вторичная кнопка в первой колонке, без пустой ячейки */
+.top-actions-grid:not(:has(.top-btn-save)) .top-btn-secondary {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.top-actions-grid:not(:has(.top-btn-save)) .top-btn-delete {
+  position: absolute;
+  right: 0;
+  bottom: 0;
 }
 
 .details-form {
@@ -1044,6 +1284,23 @@ watch(
   word-break: break-word;
 }
 
+/* Длинные тексты: скролл внутри карточки, а не только у всего drawer */
+.readonly-card.full .readonly-value {
+  max-height: min(42vh, 380px);
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+}
+
+.readonly-card.full .readonly-value::-webkit-scrollbar {
+  width: 8px;
+}
+
+.readonly-card.full .readonly-value::-webkit-scrollbar-thumb {
+  background: rgba(130, 146, 168, 0.45);
+  border-radius: 6px;
+}
+
 .readonly-nmck-tz .readonly-subline {
   margin-bottom: 4px;
 }
@@ -1051,6 +1308,19 @@ watch(
 :deep(.tz-autofill-input.is-disabled .el-textarea__inner) {
   color: var(--el-text-color-regular);
   -webkit-text-fill-color: var(--el-text-color-regular);
+}
+
+/* Ограничение высоты автоподстройки textarea (после maxRows всё равно растёт inner — режем по max-height) */
+.drawer-textarea-tall :deep(.el-textarea__inner) {
+  max-height: min(48vh, 420px);
+  overflow-y: auto;
+}
+
+.field-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #667085;
+  line-height: 1.45;
 }
 
 .comments-title {
@@ -1190,5 +1460,17 @@ watch(
   .readonly-card.full {
     grid-column: auto;
   }
+}
+</style>
+
+<!-- Drawer через Teleport: scoped не всегда цепляется к .el-drawer__*; класс может быть на корне или обёртке -->
+<style>
+.requirement-details-drawer .el-drawer__header {
+  margin-bottom: 0 !important;
+  padding-bottom: 15px;
+}
+
+.requirement-details-drawer .el-drawer__body {
+  padding: 0 !important;
 }
 </style>
