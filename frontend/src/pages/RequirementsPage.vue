@@ -235,6 +235,7 @@
                 :row-class-name="getRowClassName"
                 table-layout="fixed"
                 :fit="false"
+                max-height="calc(100vh - 360px)"
                 :style="{ width: `${tableWidth}px` }"
               >
                 <el-table-column prop="taskIdentifier" label="ID" width="150" />
@@ -1189,7 +1190,7 @@ onMounted(async () => {
   min-width: 0;
   min-height: 280px;
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: hidden;
   box-sizing: border-box;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;

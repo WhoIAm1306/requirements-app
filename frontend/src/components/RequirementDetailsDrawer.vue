@@ -79,7 +79,8 @@
           </div>
         </div>
 
-        <el-divider />
+        <div class="drawer-content-scroll">
+          <el-divider />
 
         <!--
           Режим редактирования:
@@ -586,6 +587,7 @@
               Добавить комментарий
             </el-button>
           </div>
+        </div>
         </div>
       </template>
     </div>
@@ -1168,20 +1170,28 @@ watch(
 
 <style scoped>
 .drawer-body {
-  display: grid;
-  gap: 16px;
-  padding: 0 20px 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
 }
 
 .drawer-top-sticky {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 20;
-  margin: 0 -20px;
+  margin: 0;
   padding: 0 20px 10px;
   background-color: var(--el-bg-color);
   border-bottom: 1px solid var(--el-border-color-lighter);
   box-shadow: 0 1px 0 rgba(26, 35, 50, 0.04);
+}
+
+.drawer-content-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 20px 20px;
 }
 
 .top-bar {
