@@ -576,7 +576,7 @@ const tablePage = ref(1)
 const tablePageSize = ref(50)
 
 const pagedItems = computed(() => {
-  const list = items.value
+  const list = [...items.value].sort(compareRequirementsByIdentifier)
   const start = (tablePage.value - 1) * tablePageSize.value
   return list.slice(start, start + tablePageSize.value)
 })
@@ -631,6 +631,59 @@ function shortText(value: string, maxLength = 80) {
   if (!text) return ''
   if (text.length <= maxLength) return text
   return text.slice(0, maxLength).trimEnd() + '...'
+}
+
+type IdentifierParts = {
+  prefix: string
+  numbers: number[]
+  normalized: string
+}
+
+function parseTaskIdentifier(raw: string): IdentifierParts | null {
+  const normalized = (raw || '').toUpperCase().replace(/\s+/g, '')
+  if (!normalized) return null
+
+  const prefixMatch = normalized.match(/^[^\d]+/)
+  const prefix = prefixMatch ? prefixMatch[0] : ''
+  const numbers = Array.from(normalized.matchAll(/\d+/g)).map((part) => Number(part[0]))
+
+  if (!prefix && numbers.length === 0) return null
+  return { prefix, numbers, normalized }
+}
+
+function compareIdentifierParts(a: IdentifierParts | null, b: IdentifierParts | null) {
+  if (!a && !b) return 0
+  if (!a) return 1
+  if (!b) return -1
+
+  const prefixCmp = a.prefix.localeCompare(b.prefix, 'ru')
+  if (prefixCmp !== 0) return prefixCmp
+
+  const maxLen = Math.max(a.numbers.length, b.numbers.length)
+  for (let i = 0; i < maxLen; i += 1) {
+    const an = a.numbers[i]
+    const bn = b.numbers[i]
+    if (an == null && bn == null) break
+    if (an == null) return -1
+    if (bn == null) return 1
+    if (an !== bn) return an - bn
+  }
+
+  return a.normalized.localeCompare(b.normalized, 'ru', { numeric: true })
+}
+
+function compareRequirementsByIdentifier(a: Requirement, b: Requirement) {
+  const forward = compareIdentifierParts(
+    parseTaskIdentifier(a.taskIdentifier || ''),
+    parseTaskIdentifier(b.taskIdentifier || ''),
+  )
+  if (forward !== 0) {
+    return listSortNewestFirst.value ? -forward : forward
+  }
+
+  const idDiff = (a.id || 0) - (b.id || 0)
+  if (idDiff !== 0) return listSortNewestFirst.value ? -idDiff : idDiff
+  return 0
 }
 
 function listFilterQuery(): { systemType?: string; telephonySection?: 'true' | 'false' } {
