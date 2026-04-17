@@ -1035,7 +1035,7 @@ onMounted(async () => {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 5px;
   overflow-x: hidden;
   box-sizing: border-box;
 }
