@@ -307,8 +307,9 @@ func (h *RequirementHandler) generateTaskIdentifier(systemType, queueName, contr
 	if err != nil {
 		return "", err
 	}
-	// Бизнес-правило: для очереди "Не определена" префикс в ID считаем как для 1 очереди.
-	if isUndefinedQueueValue(queueName) {
+	undefinedQueue := isUndefinedQueueValue(queueName)
+	// Бизнес-правило: для очереди "Не определена" используем ветку идентификаторов очереди 1.
+	if undefinedQueue {
 		queueNumber = 1
 	}
 	queueSegment := taskIDQueueSegment(sectionName, queueNumber)
@@ -329,9 +330,12 @@ func (h *RequirementHandler) generateTaskIdentifier(systemType, queueName, contr
 	}
 
 	var items []models.Requirement
-	query := h.db.
-		Where("implementation_queue = ?", queueName).
-		Order("id asc")
+	query := h.db.Order("id asc")
+	if undefinedQueue {
+		query = query.Where("implementation_queue IN ?", []string{standardQueueName(1), undefinedQueueName})
+	} else {
+		query = query.Where("implementation_queue = ?", queueName)
+	}
 	if excludeID > 0 {
 		query = query.Where("id <> ?", excludeID)
 	}
