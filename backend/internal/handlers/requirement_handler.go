@@ -19,6 +19,7 @@ import (
 )
 
 const telephonySectionName = "Телефония"
+const undefinedQueueName = "Не определена"
 
 func isTelephonySectionName(s string) bool {
 	return strings.EqualFold(strings.TrimSpace(s), telephonySectionName)
@@ -223,6 +224,9 @@ type ImportResult struct {
 }
 
 func extractQueueNumber(value string) (int, error) {
+	if strings.EqualFold(strings.TrimSpace(value), undefinedQueueName) {
+		return 0, nil
+	}
 	re := regexp.MustCompile(`\d+`)
 	match := re.FindString(value)
 	if match == "" {
@@ -283,13 +287,22 @@ func taskIDPrefixForSystem(systemType string) string {
 	return "ПОВ"
 }
 
-// generateTaskIdentifier формирует идентификатор (ПОВ… или ПСС… для системы 101) с учётом ГК или в формате {ПОВ|ПСС}{очередь}.{n}.
-func (h *RequirementHandler) generateTaskIdentifier(systemType, queueName, contractName string, excludeID uint) (string, error) {
+func taskIDQueueSegment(sectionName string, queueNumber int) string {
+	if isTelephonySectionName(sectionName) {
+		return fmt.Sprintf("Тел%d", queueNumber)
+	}
+	return fmt.Sprintf("%d", queueNumber)
+}
+
+// generateTaskIdentifier формирует идентификатор (ПОВ… или ПСС… для системы 101) с учётом ГК.
+// Для раздела «Телефония» используется формат с сегментом «Тел»: ПОВ.Тел1.1 / ПСС.Тел1.3.
+func (h *RequirementHandler) generateTaskIdentifier(systemType, queueName, contractName, sectionName string, excludeID uint) (string, error) {
 	prefix := taskIDPrefixForSystem(systemType)
 	queueNumber, err := extractQueueNumber(queueName)
 	if err != nil {
 		return "", err
 	}
+	queueSegment := taskIDQueueSegment(sectionName, queueNumber)
 
 	contractName = strings.TrimSpace(contractName)
 	var slug string
@@ -320,9 +333,15 @@ func (h *RequirementHandler) generateTaskIdentifier(systemType, queueName, contr
 	maxOrder := 0
 	var re *regexp.Regexp
 	if useExtended {
-		re = regexp.MustCompile(fmt.Sprintf(`^%s\.%s\.%d\.(\d+)$`, regexp.QuoteMeta(prefix), regexp.QuoteMeta(slug), queueNumber))
+		re = regexp.MustCompile(
+			fmt.Sprintf(`^%s\.%s\.%s\.(\d+)$`, regexp.QuoteMeta(prefix), regexp.QuoteMeta(slug), regexp.QuoteMeta(queueSegment)),
+		)
 	} else {
-		re = regexp.MustCompile(fmt.Sprintf(`^%s%d\.(\d+)$`, regexp.QuoteMeta(prefix), queueNumber))
+		if isTelephonySectionName(sectionName) {
+			re = regexp.MustCompile(fmt.Sprintf(`^%s\.%s\.(\d+)$`, regexp.QuoteMeta(prefix), regexp.QuoteMeta(queueSegment)))
+		} else {
+			re = regexp.MustCompile(fmt.Sprintf(`^%s%s\.(\d+)$`, regexp.QuoteMeta(prefix), regexp.QuoteMeta(queueSegment)))
+		}
 	}
 
 	for _, item := range items {
@@ -340,9 +359,12 @@ func (h *RequirementHandler) generateTaskIdentifier(systemType, queueName, contr
 	}
 
 	if useExtended {
-		return fmt.Sprintf("%s.%s.%d.%d", prefix, slug, queueNumber, maxOrder+1), nil
+		return fmt.Sprintf("%s.%s.%s.%d", prefix, slug, queueSegment, maxOrder+1), nil
 	}
-	return fmt.Sprintf("%s%d.%d", prefix, queueNumber, maxOrder+1), nil
+	if isTelephonySectionName(sectionName) {
+		return fmt.Sprintf("%s.%s.%d", prefix, queueSegment, maxOrder+1), nil
+	}
+	return fmt.Sprintf("%s%s.%d", prefix, queueSegment, maxOrder+1), nil
 }
 
 // requirementListRow — ответ списка с полями ГК для подписи в таблице.
@@ -530,7 +552,13 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		taskIdentifier = tid
 	} else {
 		var err error
-		taskIdentifier, err = h.generateTaskIdentifier(sys, strings.TrimSpace(req.ImplementationQueue), contractName, 0)
+		taskIdentifier, err = h.generateTaskIdentifier(
+			sys,
+			strings.TrimSpace(req.ImplementationQueue),
+			contractName,
+			strings.TrimSpace(req.SectionName),
+			0,
+		)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Ошибка генерации идентификатора задачи"})
 			return
@@ -663,7 +691,13 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 			}
 			item.TaskIdentifier = explicitTID
 		} else {
-			taskIdentifier, err := h.generateTaskIdentifier(sys, newQueue, contractName, item.ID)
+			taskIdentifier, err := h.generateTaskIdentifier(
+				sys,
+				newQueue,
+				contractName,
+				strings.TrimSpace(req.SectionName),
+				item.ID,
+			)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"message": "Ошибка генерации идентификатора задачи"})
 				return
@@ -902,6 +936,9 @@ func isRowEmpty(row []string) bool {
 }
 
 func standardQueueName(queueNumber int) string {
+	if queueNumber == 0 {
+		return undefinedQueueName
+	}
 	return fmt.Sprintf("%d очередь", queueNumber)
 }
 
@@ -1060,7 +1097,13 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 			}
 		} else {
 			var err error
-			taskIdentifier, err = h.generateTaskIdentifier(systemType, normalizedQueue, contractName, 0)
+			taskIdentifier, err = h.generateTaskIdentifier(
+				systemType,
+				normalizedQueue,
+				contractName,
+				sectionName,
+				0,
+			)
 			if err != nil {
 				result.Failed++
 				result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: ошибка генерации идентификатора", lineNumber))

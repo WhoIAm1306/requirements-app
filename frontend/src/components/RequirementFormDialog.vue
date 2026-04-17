@@ -303,6 +303,7 @@ const authStore = useAuthStore()
 const loading = defineModel<boolean>('loading', { default: false })
 const queues = ref<QueueItem[]>([])
 const contracts = ref<{ id: number; name: string }[]>([])
+const DEFAULT_QUEUE_NAME = 'Не определена'
 
 const selectedContractId = ref<number | null>(null)
 const stages = ref<GKStage[]>([])
@@ -321,7 +322,7 @@ const emptyForm = (): RequirementPayload => ({
   proposalText: '',
   problemComment: '',
   discussionSummary: '',
-  implementationQueue: '1 очередь',
+  implementationQueue: DEFAULT_QUEUE_NAME,
   noteText: '',
   tzPointText: '',
   nmckPointText: '',
@@ -375,10 +376,18 @@ watch(
 
 async function loadQueues() {
   try {
-    queues.value = await fetchQueues()
+    const loaded = await fetchQueues()
+    if (loaded.some((q) => (q.name || '').trim() === DEFAULT_QUEUE_NAME)) {
+      queues.value = loaded
+    } else {
+      queues.value = [
+        { id: 0, number: 0, name: DEFAULT_QUEUE_NAME, isActive: true, createdAt: '' },
+        ...loaded,
+      ]
+    }
   } catch (error: any) {
     console.error('queues load error', error)
-    queues.value = []
+    queues.value = [{ id: 0, number: 0, name: DEFAULT_QUEUE_NAME, isActive: true, createdAt: '' }]
   }
 }
 

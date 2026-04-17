@@ -568,6 +568,7 @@ const tzInfoVisible = ref(false)
 const tzInfoRequirementId = ref<number | null>(null)
 
 const archiveFilterMode = ref<'active' | 'all' | 'archived_only'>('active')
+const DEFAULT_QUEUE_NAME = 'Не определена'
 
 /**
  * Основные данные таблицы и справочники.
@@ -756,9 +757,17 @@ function queueSummaryCardClass(queueName: string) {
  */
 async function loadQueues() {
   try {
-    queues.value = await fetchQueues()
+    const loaded = await fetchQueues()
+    if (loaded.some((q) => (q.name || '').trim() === DEFAULT_QUEUE_NAME)) {
+      queues.value = loaded
+    } else {
+      queues.value = [
+        { id: 0, number: 0, name: DEFAULT_QUEUE_NAME, isActive: true, createdAt: '' },
+        ...loaded,
+      ]
+    }
   } catch {
-    queues.value = []
+    queues.value = [{ id: 0, number: 0, name: DEFAULT_QUEUE_NAME, isActive: true, createdAt: '' }]
   }
 }
 

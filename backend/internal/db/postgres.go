@@ -83,6 +83,7 @@ func NewPostgres(cfg *config.Config) (*gorm.DB, error) {
 // seedDefaultQueues создаёт стандартные очереди, если их ещё нет.
 func seedDefaultQueues(db *gorm.DB) error {
 	defaults := []models.QueueDictionary{
+		{Number: 0, Name: "Не определена", IsActive: true},
 		{Number: 1, Name: "1 очередь", IsActive: true},
 		{Number: 2, Name: "2 очередь", IsActive: true},
 		{Number: 3, Name: "3 очередь", IsActive: true},

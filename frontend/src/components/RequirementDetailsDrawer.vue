@@ -709,6 +709,7 @@ const emit = defineEmits<{
  * Store текущего пользователя.
  */
 const authStore = useAuthStore()
+const DEFAULT_QUEUE_NAME = 'Не определена'
 
 const canFullEdit = computed(() => authStore.canEditRequirementsFully)
 const canManageRequirementCard = computed(() => authStore.canManageRequirementCard)
@@ -817,9 +818,17 @@ function nmckFunctionOptionLabel(fn: GKFunction) {
  */
 async function loadQueues() {
   try {
-    queues.value = await fetchQueues()
+    const loaded = await fetchQueues()
+    if (loaded.some((q) => (q.name || '').trim() === DEFAULT_QUEUE_NAME)) {
+      queues.value = loaded
+    } else {
+      queues.value = [
+        { id: 0, number: 0, name: DEFAULT_QUEUE_NAME, isActive: true, createdAt: '' },
+        ...loaded,
+      ]
+    }
   } catch {
-    queues.value = []
+    queues.value = [{ id: 0, number: 0, name: DEFAULT_QUEUE_NAME, isActive: true, createdAt: '' }]
   }
 }
 
@@ -854,7 +863,7 @@ function fillForm(data: Requirement) {
   form.proposalText = data.proposalText || ''
   form.problemComment = data.problemComment || ''
   form.discussionSummary = data.discussionSummary || ''
-  form.implementationQueue = data.implementationQueue || ''
+  form.implementationQueue = data.implementationQueue || DEFAULT_QUEUE_NAME
   form.contractName = data.contractName || ''
   form.contractTZFunctionId = data.contractTZFunctionId ?? null
   form.noteText = data.noteText || ''
