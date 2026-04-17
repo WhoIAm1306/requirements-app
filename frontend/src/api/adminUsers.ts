@@ -1,6 +1,13 @@
 import apiClient from './client'
 import type { AdminUser, CreateAdminUserPayload, UpdateAdminUserPayload } from '@/types'
 
+export interface AdminUsersImportResult {
+  created: number
+  updated: number
+  failed: number
+  errors: string[]
+}
+
 // Список пользователей для административной панели.
 export async function fetchAdminUsers() {
   const { data } = await apiClient.get<AdminUser[]>('/admin/users')
@@ -29,6 +36,22 @@ export async function deleteAdminUser(id: number) {
 export async function changeAdminUserPassword(id: number, newPassword: string) {
   const { data } = await apiClient.post<{ message: string }>(`/admin/users/${id}/change-password`, {
     newPassword,
+  })
+  return data
+}
+
+// Экспорт таблицы пользователей и прав.
+export async function exportAdminUsersFile() {
+  const { data } = await apiClient.get<Blob>('/admin/users/export', { responseType: 'blob' })
+  return data
+}
+
+// Импорт новых пользователей из Excel.
+export async function importAdminUsersFile(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await apiClient.post<AdminUsersImportResult>('/admin/users/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
   })
   return data
 }

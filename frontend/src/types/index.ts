@@ -5,6 +5,8 @@ export type AccessLevel = 'read' | 'edit'
 
 /** Доп. права к карточке требования при accessLevel read (ключи — см. requirementFieldGrants.ts). */
 export type RequirementFieldGrants = Record<string, boolean | undefined>
+/** Доп. права к справочнику ГК (ключи — см. editAccessGrants.ts). */
+export type GKDirectoryGrants = Record<string, boolean | undefined>
 
 // Профиль текущего пользователя.
 export interface UserProfile {
@@ -16,6 +18,7 @@ export interface UserProfile {
   isSuperuser: boolean
   isActive: boolean
   requirementFieldGrants?: RequirementFieldGrants
+  gkDirectoryGrants?: GKDirectoryGrants
 }
 
 // Логин по корпоративной почте.
@@ -46,6 +49,7 @@ export interface AdminUser {
   isSuperuser: boolean
   isActive: boolean
   requirementFieldGrants?: RequirementFieldGrants
+  gkDirectoryGrants?: GKDirectoryGrants
   createdAt: string
 }
 
@@ -58,6 +62,7 @@ export interface CreateAdminUserPayload {
   accessLevel: AccessLevel
   isActive: boolean
   requirementFieldGrants?: RequirementFieldGrants
+  gkDirectoryGrants?: GKDirectoryGrants
 }
 
 // Обновление пользователя.
@@ -68,6 +73,7 @@ export interface UpdateAdminUserPayload {
   accessLevel: AccessLevel
   isActive: boolean
   requirementFieldGrants?: RequirementFieldGrants
+  gkDirectoryGrants?: GKDirectoryGrants
 }
 
 // Элемент очереди.

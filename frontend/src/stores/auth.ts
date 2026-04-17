@@ -42,6 +42,34 @@ export const useAuthStore = defineStore('auth', () => {
     () => canEditRequirementsFully.value || hasPartialRequirementFieldEdit.value,
   )
 
+  const canEditGKContract = computed(
+    () =>
+      Boolean(profile.value?.isSuperuser) ||
+      ((profile.value?.accessLevel || 'read') === 'edit' &&
+        Boolean(profile.value?.gkDirectoryGrants?.gkContractEdit)),
+  )
+
+  const canEditGKStages = computed(
+    () =>
+      Boolean(profile.value?.isSuperuser) ||
+      ((profile.value?.accessLevel || 'read') === 'edit' &&
+        Boolean(profile.value?.gkDirectoryGrants?.gkStageEdit)),
+  )
+
+  const canEditGKFunctions = computed(
+    () =>
+      Boolean(profile.value?.isSuperuser) ||
+      ((profile.value?.accessLevel || 'read') === 'edit' &&
+        Boolean(profile.value?.gkDirectoryGrants?.gkFunctionEdit)),
+  )
+
+  const canDeleteRequirements = computed(
+    () =>
+      Boolean(profile.value?.isSuperuser) ||
+      ((profile.value?.accessLevel || 'read') === 'edit' &&
+        Boolean(profile.value?.requirementFieldGrants?.deleteRequirement)),
+  )
+
   function canEditRequirementField(key: string): boolean {
     if (canEditRequirementsFully.value) return true
     return Boolean(profile.value?.requirementFieldGrants?.[key])
@@ -89,6 +117,10 @@ export const useAuthStore = defineStore('auth', () => {
     hasPartialRequirementFieldEdit,
     canManageRequirementCard,
     canEditRequirementField,
+    canEditGKContract,
+    canEditGKStages,
+    canEditGKFunctions,
+    canDeleteRequirements,
     setAuth,
     setProfile,
     logout,

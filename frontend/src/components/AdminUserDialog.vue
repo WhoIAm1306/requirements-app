@@ -57,6 +57,26 @@
         </el-select>
       </el-form-item>
 
+      <el-form-item v-if="form.accessLevel === 'edit'" label="Дополнительные права (для редактирования)">
+        <el-select
+          v-model="selectedEditGrantKeys"
+          multiple
+          filterable
+          collapse-tags
+          collapse-tags-tooltip
+          :max-collapse-tags="4"
+          placeholder="Выберите дополнительные права для уровня Чтение и редактирование"
+          style="width: 100%"
+        >
+          <el-option
+            v-for="opt in EDIT_ACCESS_GRANT_OPTIONS"
+            :key="opt.value"
+            :label="opt.label"
+            :value="opt.value"
+          />
+        </el-select>
+      </el-form-item>
+
       <el-form-item label="Активен">
         <el-switch v-model="form.isActive" />
       </el-form-item>
@@ -75,8 +95,15 @@
 import { reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { createAdminUser, updateAdminUser } from '@/api/adminUsers'
+import { EDIT_ACCESS_GRANT_OPTIONS } from '@/constants/editAccessGrants'
 import { REQUIREMENT_FIELD_GRANT_OPTIONS } from '@/constants/requirementFieldGrants'
-import type { AdminUser, AccessLevel, Organization, RequirementFieldGrants } from '@/types'
+import type {
+  AccessLevel,
+  AdminUser,
+  GKDirectoryGrants,
+  Organization,
+  RequirementFieldGrants,
+} from '@/types'
 
 const props = defineProps<{
   modelValue: boolean
@@ -108,12 +135,28 @@ const form = reactive<{
 })
 
 const selectedGrantKeys = ref<string[]>([])
+const selectedEditGrantKeys = ref<string[]>([])
 
 function grantsKeysFromUser(u: AdminUser | null): string[] {
   if (!u?.requirementFieldGrants) return []
   return Object.entries(u.requirementFieldGrants)
     .filter(([, v]) => Boolean(v))
     .map(([k]) => k)
+}
+
+function gkGrantsKeysFromUser(u: AdminUser | null): string[] {
+  const keys: string[] = []
+  if (u?.gkDirectoryGrants) {
+    keys.push(
+      ...Object.entries(u.gkDirectoryGrants)
+        .filter(([, v]) => Boolean(v))
+        .map(([k]) => k),
+    )
+  }
+  if (u?.requirementFieldGrants?.deleteRequirement) {
+    keys.push('deleteRequirement')
+  }
+  return keys
 }
 
 watch(
@@ -129,6 +172,7 @@ watch(
       form.accessLevel = props.initialUser.accessLevel
       form.isActive = props.initialUser.isActive
       selectedGrantKeys.value = grantsKeysFromUser(props.initialUser)
+      selectedEditGrantKeys.value = gkGrantsKeysFromUser(props.initialUser)
       return
     }
 
@@ -139,6 +183,7 @@ watch(
     form.accessLevel = 'read'
     form.isActive = true
     selectedGrantKeys.value = []
+    selectedEditGrantKeys.value = []
   },
   { immediate: true },
 )
@@ -152,13 +197,31 @@ function requirementGrantsForPayload(): RequirementFieldGrants {
     }
     return out
   }
+  if (form.accessLevel === 'edit') {
+    const out: RequirementFieldGrants = {}
+    if (selectedEditGrantKeys.value.includes('deleteRequirement')) {
+      out.deleteRequirement = true
+    }
+    return out
+  }
   return {}
+}
+
+function gkDirectoryGrantsForPayload(): GKDirectoryGrants {
+  const out: GKDirectoryGrants = {}
+  if (form.accessLevel !== 'edit') return out
+  const allowed = new Set(EDIT_ACCESS_GRANT_OPTIONS.map((o) => o.value))
+  for (const key of selectedEditGrantKeys.value) {
+    if (key !== 'deleteRequirement' && allowed.has(key)) out[key] = true
+  }
+  return out
 }
 
 async function submit() {
   try {
     loading.value = true
     const requirementFieldGrants = requirementGrantsForPayload()
+    const gkDirectoryGrants = gkDirectoryGrantsForPayload()
 
     if (props.mode === 'create') {
       await createAdminUser({
@@ -169,6 +232,7 @@ async function submit() {
         accessLevel: form.accessLevel,
         isActive: form.isActive,
         requirementFieldGrants,
+        gkDirectoryGrants,
       })
       ElMessage.success('Пользователь создан')
     } else if (props.initialUser) {
@@ -179,6 +243,7 @@ async function submit() {
         accessLevel: form.accessLevel,
         isActive: form.isActive,
         requirementFieldGrants,
+        gkDirectoryGrants,
       })
       ElMessage.success('Пользователь обновлён')
     }

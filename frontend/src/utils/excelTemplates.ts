@@ -114,3 +114,34 @@ export function downloadGKFunctionsTemplate() {
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Функции ТЗ')
   XLSX.writeFile(workbook, 'template_gk_tz_functions.xlsx')
 }
+
+export function downloadUsersTemplate() {
+  const rows = [
+    [
+      'ФИО',
+      'Организация',
+      'Почта',
+      'Пароль',
+      'Уровень доступа',
+      'Суперпользователь',
+      'Активен',
+      'Гранты карточки (CSV)',
+      'Гранты ГК (CSV)',
+    ],
+    [
+      'Иванов Иван Иванович',
+      'ДИТ',
+      'ivanov@example.com',
+      'secret123',
+      'edit',
+      'false',
+      'true',
+      'comment,attachments,deleteRequirement',
+      'gkContractEdit,gkStageEdit',
+    ],
+  ]
+  const worksheet = XLSX.utils.aoa_to_sheet(rows)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Пользователи')
+  XLSX.writeFile(workbook, 'template_users.xlsx')
+}

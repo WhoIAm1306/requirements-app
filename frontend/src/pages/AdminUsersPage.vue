@@ -12,6 +12,9 @@
 
         <div class="header-actions">
           <el-button @click="router.push('/requirements')">Назад</el-button>
+          <el-button @click="downloadTemplate">Шаблон</el-button>
+          <el-button @click="handleExport">Экспорт</el-button>
+          <el-button @click="importDialogVisible = true">Импорт</el-button>
           <el-button type="primary" @click="openCreate">Добавить пользователя</el-button>
         </div>
       </div>
@@ -67,6 +70,35 @@
         :initial-user="selectedUser"
         @saved="onUserSaved"
       />
+
+      <el-dialog v-model="importDialogVisible" title="Импорт пользователей из Excel" width="620px">
+        <div class="import-body">
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="Импорт добавляет только новых пользователей. Обязательные колонки: ФИО, Организация, Почта, Пароль, Уровень доступа."
+          />
+          <input type="file" accept=".xlsx" @change="handleImportFileChange" />
+          <div v-if="importFile" class="file-name">
+            Выбран файл: <strong>{{ importFile.name }}</strong>
+          </div>
+          <el-card v-if="importResult" shadow="never">
+            <div><strong>Добавлено:</strong> {{ importResult.created }}</div>
+            <div><strong>Ошибок:</strong> {{ importResult.failed }}</div>
+            <div v-if="importResult.errors.length" class="errors-block">
+              <strong>Детали:</strong>
+              <ul>
+                <li v-for="(err, idx) in importResult.errors" :key="idx">{{ err }}</li>
+              </ul>
+            </div>
+          </el-card>
+        </div>
+        <template #footer>
+          <el-button @click="importDialogVisible = false">Закрыть</el-button>
+          <el-button type="primary" :loading="importLoading" @click="handleImport">Загрузить</el-button>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
@@ -75,10 +107,17 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { deleteAdminUser, fetchAdminUsers } from '@/api/adminUsers'
+import {
+  deleteAdminUser,
+  exportAdminUsersFile,
+  fetchAdminUsers,
+  importAdminUsersFile,
+  type AdminUsersImportResult,
+} from '@/api/adminUsers'
 import { fetchMe } from '@/api/auth'
 import AdminUserDialog from '@/components/AdminUserDialog.vue'
 import { useAuthStore } from '@/stores/auth'
+import { downloadUsersTemplate } from '@/utils/excelTemplates'
 import type { AdminUser } from '@/types'
 
 /**
@@ -100,6 +139,10 @@ const dialogLoading = ref(false)
 const dialogVisible = ref(false)
 const dialogMode = ref<'create' | 'edit'>('create')
 const selectedUser = ref<AdminUser | null>(null)
+const importDialogVisible = ref(false)
+const importLoading = ref(false)
+const importFile = ref<File | null>(null)
+const importResult = ref<AdminUsersImportResult | null>(null)
 
 /**
  * Загрузка списка пользователей.
@@ -143,6 +186,47 @@ function openEdit(user: AdminUser) {
   dialogMode.value = 'edit'
   selectedUser.value = user
   dialogVisible.value = true
+}
+
+function downloadTemplate() {
+  downloadUsersTemplate()
+}
+
+async function handleExport() {
+  try {
+    const blob = await exportAdminUsersFile()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'users_export.xlsx'
+    a.click()
+    window.URL.revokeObjectURL(url)
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка экспорта пользователей')
+  }
+}
+
+function handleImportFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  importFile.value = input.files?.[0] || null
+  importResult.value = null
+}
+
+async function handleImport() {
+  if (!importFile.value) {
+    ElMessage.warning('Сначала выберите .xlsx файл')
+    return
+  }
+  try {
+    importLoading.value = true
+    importResult.value = await importAdminUsersFile(importFile.value)
+    ElMessage.success('Импорт завершен')
+    await loadData()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка импорта пользователей')
+  } finally {
+    importLoading.value = false
+  }
 }
 
 async function handleDeleteUser(user: AdminUser) {
@@ -221,5 +305,19 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.import-body {
+  display: grid;
+  gap: 12px;
+}
+
+.file-name {
+  color: #606266;
+}
+
+.errors-block ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
 }
 </style>

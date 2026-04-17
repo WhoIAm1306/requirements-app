@@ -212,8 +212,9 @@
                 </el-button>
               </el-tooltip>
             </div>
-            <div v-if="canEdit && selectionMode" class="selection-actions-row">
+            <div v-if="selectionMode" class="selection-actions-row">
               <el-button
+                v-if="canEdit"
                 type="warning"
                 plain
                 :disabled="selectedRows.length === 0"
@@ -222,6 +223,7 @@
                 В архив ({{ selectedRows.length }})
               </el-button>
               <el-button
+                v-if="canDeleteRequirements"
                 type="danger"
                 plain
                 :disabled="selectedRows.length === 0"
@@ -244,7 +246,7 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="toggle-selection">
+                  <el-dropdown-item v-if="canEdit || canDeleteRequirements" command="toggle-selection">
                     {{ selectionMode ? 'Завершить выделение' : 'Выделить' }}
                   </el-dropdown-item>
                   <el-dropdown-item command="import">Импорт предложений</el-dropdown-item>
@@ -414,8 +416,10 @@
                       <template #dropdown>
                         <el-dropdown-menu>
                           <el-dropdown-item command="open">Просмотр</el-dropdown-item>
-                          <template v-if="canEdit">
+                          <template v-if="canDeleteRequirements">
                             <el-dropdown-item command="delete" divided>Удалить</el-dropdown-item>
+                          </template>
+                          <template v-if="canEdit">
                             <el-dropdown-item v-if="!row.isArchived" command="archive">
                               В архив
                             </el-dropdown-item>
@@ -518,6 +522,7 @@ const authStore = useAuthStore()
  * Пользователь может изменять данные только если у него edit или superuser.
  */
 const canEdit = computed(() => authStore.isSuperuser || authStore.accessLevel === 'edit')
+const canDeleteRequirements = computed(() => authStore.canDeleteRequirements)
 
 /**
  * Состояния страницы.
@@ -922,6 +927,10 @@ function handleUserMenuCommand(cmd: string) {
 
 function handleImportMenuCommand(cmd: string) {
   if (cmd === 'toggle-selection') {
+    if (!canEdit.value && !canDeleteRequirements.value) {
+      ElMessage.warning('Недостаточно прав для режима выделения')
+      return
+    }
     if (selectionMode.value) {
       exitSelectionMode()
     } else {
@@ -954,6 +963,10 @@ function openTzInfo(row: Requirement) {
 }
 
 async function handleDelete(row: Requirement) {
+  if (!canDeleteRequirements.value) {
+    ElMessage.warning('Недостаточно прав для удаления предложений')
+    return
+  }
   try {
     await ElMessageBox.confirm(
       'Удалить запись? Она исчезнет из списков. Это не архив: архивные записи можно фильтром «Только архивные».',
@@ -981,6 +994,10 @@ async function handleDelete(row: Requirement) {
 }
 
 async function handleDeleteSelected() {
+  if (!canDeleteRequirements.value) {
+    ElMessage.warning('Недостаточно прав для удаления предложений')
+    return
+  }
   const rows = selectedRows.value
   if (!rows.length) {
     ElMessage.info('Выберите записи для удаления')

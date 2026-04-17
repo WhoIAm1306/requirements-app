@@ -14,7 +14,7 @@
         <div class="header-actions">
           <el-button @click="router.push('/requirements')">Назад</el-button>
 
-          <el-button v-if="canEdit" type="primary" @click="openCreateContract">
+          <el-button v-if="canEditContract" type="primary" @click="openCreateContract">
             Добавить ГК
           </el-button>
         </div>
@@ -59,7 +59,7 @@
                   Открыть
                 </el-button>
                 <el-button
-                  v-if="canEdit"
+                  v-if="canDelete"
                   size="small"
                   type="danger"
                   plain
@@ -88,13 +88,18 @@
               <div class="section-header">
                 <div class="section-title">Главная информация</div>
 
-                <div v-if="canEdit" class="section-actions section-actions--split">
+                <div v-if="canEditContract || canDelete" class="section-actions section-actions--split">
                   <div class="section-actions-group">
-                    <el-button type="primary" :loading="saveLoading" @click="handleSaveContract">
+                    <el-button
+                      v-if="canEditContract"
+                      type="primary"
+                      :loading="saveLoading"
+                      @click="handleSaveContract"
+                    >
                       Сохранить
                     </el-button>
                   </div>
-                  <div class="section-actions-group section-actions-group--danger">
+                  <div v-if="canDelete" class="section-actions-group section-actions-group--danger">
                     <el-button type="danger" plain @click="confirmDeleteContractFromDrawer">
                       Удалить ГК
                     </el-button>
@@ -102,7 +107,7 @@
                 </div>
               </div>
 
-              <el-form v-if="canEdit" class="gkd-main-form" label-position="top">
+              <el-form v-if="canEditContract" class="gkd-main-form" label-position="top">
                 <el-form-item label="Наименование ГК">
                   <el-input v-model="contractForm.name" placeholder="Введите наименование" />
                 </el-form-item>
@@ -155,7 +160,7 @@
 
               <div class="section-actions section-actions--toolbar">
                 <el-button
-                  v-if="canEdit"
+                  v-if="canEditStages"
                   @click="handleAddStage"
                   type="primary"
                   plain
@@ -163,11 +168,11 @@
                   Добавить этап
                 </el-button>
 
-                <el-button v-if="canEdit" @click="downloadGKTemplate">
+                <el-button v-if="canEditFunctions" @click="downloadGKTemplate">
                   Шаблон функций ТЗ
                 </el-button>
 
-                <el-button v-if="canEdit" @click="importVisible = true">
+                <el-button v-if="canEditFunctions" @click="importVisible = true">
                   Импорт из Excel
                 </el-button>
               </div>
@@ -184,7 +189,7 @@
                   <div class="collapse-stage-header">
                     <span class="collapse-stage-title-text">{{ stageCollapseTitle(stage) }}</span>
                     <el-button
-                      v-if="canEdit"
+                      v-if="canDelete"
                       type="danger"
                       size="small"
                       plain
@@ -223,13 +228,31 @@
                         <span v-else class="muted-dash">—</span>
                       </template>
                     </el-table-column>
-                    <el-table-column v-if="canEdit" label="" width="196" align="center" fixed="right">
+                    <el-table-column
+                      v-if="canEditFunctions || canDelete"
+                      label=""
+                      width="196"
+                      align="center"
+                      fixed="right"
+                    >
                       <template #default="{ row: fnRow }">
                         <div class="gkd-fn-actions">
-                          <el-button type="primary" size="small" link @click.stop="openFunctionDialog(stage.stageNumber, fnRow)">
+                          <el-button
+                            v-if="canEditFunctions"
+                            type="primary"
+                            size="small"
+                            link
+                            @click.stop="openFunctionDialog(stage.stageNumber, fnRow)"
+                          >
                             Изменить
                           </el-button>
-                          <el-button type="danger" size="small" link @click.stop="confirmDeleteFunction(fnRow.id)">
+                          <el-button
+                            v-if="canDelete"
+                            type="danger"
+                            size="small"
+                            link
+                            @click.stop="confirmDeleteFunction(fnRow.id)"
+                          >
                             Удалить
                           </el-button>
                         </div>
@@ -237,7 +260,7 @@
                     </el-table-column>
                   </el-table>
 
-                  <div v-if="canEdit" class="stage-actions">
+                  <div v-if="canEditFunctions" class="stage-actions">
                     <el-button type="primary" plain size="small" @click="openFunctionDialog(stage.stageNumber, null)">
                       + Добавить функцию ТЗ
                     </el-button>
@@ -267,11 +290,11 @@
                 />
 
                 <div class="upload-row">
-                  <el-button v-if="canEdit" type="primary" plain @click="triggerTzFilePick">
+                  <el-button v-if="canEditFunctions" type="primary" plain @click="triggerTzFilePick">
                     Прикрепить файлы
                   </el-button>
                   <el-button
-                    v-if="canEdit"
+                    v-if="canEditFunctions"
                     type="primary"
                     :loading="attachmentsUploading"
                     :disabled="!tzSelectedFiles.length"
@@ -280,7 +303,7 @@
                     Загрузить выбранные
                   </el-button>
                 </div>
-                <div v-if="canEdit && tzSelectedFiles.length" class="selected-files-hint">
+                <div v-if="canEditFunctions && tzSelectedFiles.length" class="selected-files-hint">
                   Выбрано файлов: {{ tzSelectedFiles.length }}
                 </div>
 
@@ -296,7 +319,7 @@
                     <div class="attachment-row-actions">
                       <el-button size="small" @click="download(a.id)">Скачать</el-button>
                       <el-button
-                        v-if="canEdit"
+                        v-if="canDelete"
                         size="small"
                         type="danger"
                         plain
@@ -322,11 +345,11 @@
                 />
 
                 <div class="upload-row">
-                  <el-button v-if="canEdit" type="primary" plain @click="triggerNmckFilePick">
+                  <el-button v-if="canEditFunctions" type="primary" plain @click="triggerNmckFilePick">
                     Прикрепить файлы
                   </el-button>
                   <el-button
-                    v-if="canEdit"
+                    v-if="canEditFunctions"
                     type="primary"
                     :loading="attachmentsUploading"
                     :disabled="!nmckSelectedFiles.length"
@@ -335,7 +358,7 @@
                     Загрузить выбранные
                   </el-button>
                 </div>
-                <div v-if="canEdit && nmckSelectedFiles.length" class="selected-files-hint">
+                <div v-if="canEditFunctions && nmckSelectedFiles.length" class="selected-files-hint">
                   Выбрано файлов: {{ nmckSelectedFiles.length }}
                 </div>
 
@@ -351,7 +374,7 @@
                     <div class="attachment-row-actions">
                       <el-button size="small" @click="download(a.id)">Скачать</el-button>
                       <el-button
-                        v-if="canEdit"
+                        v-if="canDelete"
                         size="small"
                         type="danger"
                         plain
@@ -378,7 +401,7 @@
       />
 
       <GKFunctionDialog
-        v-if="canEdit"
+        v-if="canEditFunctions"
         v-model="functionDialogVisible"
         :contract-id="selectedContractId"
         :stage-number="functionDialogStageNumber"
@@ -388,7 +411,7 @@
       />
 
       <ImportExcelDialog
-        v-if="canEdit"
+        v-if="canEditFunctions"
         v-model="importVisible"
         mode="gkFunctions"
         :contractId="selectedContractId || undefined"
@@ -426,7 +449,10 @@ import ImportExcelDialog from '@/components/ImportExcelDialog.vue'
 const router = useRouter()
 const authStore = useAuthStore()
 
-const canEdit = computed(() => authStore.isSuperuser || authStore.accessLevel === 'edit')
+const canEditContract = computed(() => authStore.canEditGKContract)
+const canEditStages = computed(() => authStore.canEditGKStages)
+const canEditFunctions = computed(() => authStore.canEditGKFunctions)
+const canDelete = computed(() => authStore.isSuperuser)
 
 const loading = ref(false)
 const contracts = ref<ContractItem[]>([])
@@ -797,7 +823,7 @@ onBeforeUnmount(() => {
   width: 100%;
   overflow-x: hidden;
   background: radial-gradient(circle at top left, #f4f8ff 0%, #f7f9fc 35%, #f3f5f8 100%);
-  padding: 16px;
+  padding: 10px 15px 5px 15px;
   box-sizing: border-box;
 }
 

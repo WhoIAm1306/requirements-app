@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -9,6 +12,7 @@ import (
 	"requirements-app/backend/internal/models"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xuri/excelize/v2"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -33,6 +37,7 @@ type AdminUserResponse struct {
 	IsSuperuser            bool            `json:"isSuperuser"`
 	IsActive               bool            `json:"isActive"`
 	RequirementFieldGrants map[string]bool `json:"requirementFieldGrants,omitempty"`
+	GKDirectoryGrants      map[string]bool `json:"gkDirectoryGrants,omitempty"`
 	CreatedAt              string          `json:"createdAt"`
 }
 
@@ -45,6 +50,7 @@ type CreateUserRequest struct {
 	AccessLevel            string          `json:"accessLevel"`
 	IsActive               bool            `json:"isActive"`
 	RequirementFieldGrants map[string]bool `json:"requirementFieldGrants"`
+	GKDirectoryGrants      map[string]bool `json:"gkDirectoryGrants"`
 }
 
 // UpdateUserRequest — обновление существующего пользователя без смены пароля.
@@ -55,6 +61,14 @@ type UpdateUserRequest struct {
 	AccessLevel            string          `json:"accessLevel"`
 	IsActive               bool            `json:"isActive"`
 	RequirementFieldGrants map[string]bool `json:"requirementFieldGrants"`
+	GKDirectoryGrants      map[string]bool `json:"gkDirectoryGrants"`
+}
+
+type UserImportResult struct {
+	Created int      `json:"created"`
+	Updated int      `json:"updated"`
+	Failed  int      `json:"failed"`
+	Errors  []string `json:"errors"`
 }
 
 func decodeUserGrantsJSON(raw string) map[string]bool {
@@ -78,6 +92,30 @@ func encodeRequirementGrants(m map[string]bool) string {
 	return string(b)
 }
 
+func parseImportBool(value string) bool {
+	v := strings.ToLower(strings.TrimSpace(value))
+	switch v {
+	case "1", "true", "да", "yes", "y":
+		return true
+	default:
+		return false
+	}
+}
+
+func parseCSVGrants(value string, allowed map[string]struct{}) map[string]bool {
+	result := map[string]bool{}
+	for _, part := range strings.Split(value, ",") {
+		key := strings.TrimSpace(part)
+		if key == "" {
+			continue
+		}
+		if _, ok := allowed[key]; ok {
+			result[key] = true
+		}
+	}
+	return result
+}
+
 // mapAdminUser переводит модель пользователя в DTO для admin UI.
 func mapAdminUser(user models.User) AdminUserResponse {
 	return AdminUserResponse{
@@ -89,6 +127,7 @@ func mapAdminUser(user models.User) AdminUserResponse {
 		IsSuperuser:            user.IsSuperuser,
 		IsActive:               user.IsActive,
 		RequirementFieldGrants: decodeUserGrantsJSON(user.RequirementFieldGrants),
+		GKDirectoryGrants:      decodeUserGrantsJSON(user.GKDirectoryGrants),
 		CreatedAt:              user.CreatedAt.Format("2006-01-02 15:04:05"),
 	}
 }
@@ -162,6 +201,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 		PasswordHash:           string(passwordHash),
 		AccessLevel:            accessLevel,
 		RequirementFieldGrants: encodeRequirementGrants(req.RequirementFieldGrants),
+		GKDirectoryGrants:      encodeRequirementGrants(req.GKDirectoryGrants),
 		IsActive:               req.IsActive,
 	}
 
@@ -222,6 +262,9 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	if req.RequirementFieldGrants != nil {
 		user.RequirementFieldGrants = encodeRequirementGrants(req.RequirementFieldGrants)
 	}
+	if req.GKDirectoryGrants != nil {
+		user.GKDirectoryGrants = encodeRequirementGrants(req.GKDirectoryGrants)
+	}
 
 	if err := h.db.Save(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка обновления пользователя"})
@@ -266,4 +309,222 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Пользователь удалён"})
+}
+
+// ExportUsers выгружает пользователей и права в Excel.
+func (h *UserHandler) ExportUsers(c *gin.Context) {
+	var users []models.User
+	if err := h.db.Order("full_name asc").Find(&users).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения пользователей"})
+		return
+	}
+
+	file := excelize.NewFile()
+	const sheet = "Пользователи"
+	file.SetSheetName(file.GetSheetName(0), sheet)
+
+	headers := []string{
+		"ФИО",
+		"Организация",
+		"Почта",
+		"Уровень доступа",
+		"Суперпользователь",
+		"Активен",
+		"Гранты карточки (CSV)",
+		"Гранты ГК (CSV)",
+		"Дата создания",
+	}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		_ = file.SetCellValue(sheet, cell, h)
+	}
+
+	for i, u := range users {
+		row := i + 2
+		reqGrants := decodeUserGrantsJSON(u.RequirementFieldGrants)
+		gkGrants := decodeUserGrantsJSON(u.GKDirectoryGrants)
+		reqKeys := make([]string, 0, len(reqGrants))
+		for k, v := range reqGrants {
+			if v {
+				reqKeys = append(reqKeys, k)
+			}
+		}
+		gkKeys := make([]string, 0, len(gkGrants))
+		for k, v := range gkGrants {
+			if v {
+				gkKeys = append(gkKeys, k)
+			}
+		}
+		values := []any{
+			u.FullName,
+			u.Organization,
+			u.Email,
+			u.AccessLevel,
+			u.IsSuperuser,
+			u.IsActive,
+			strings.Join(reqKeys, ","),
+			strings.Join(gkKeys, ","),
+			u.CreatedAt.Format("2006-01-02 15:04:05"),
+		}
+		for col, v := range values {
+			cell, _ := excelize.CoordinatesToCellName(col+1, row)
+			_ = file.SetCellValue(sheet, cell, v)
+		}
+	}
+
+	buf, err := file.WriteToBuffer()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка формирования Excel"})
+		return
+	}
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", `attachment; filename="users_export.xlsx"`)
+	c.Header("File-Name", "users_export.xlsx")
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buf.Bytes())
+}
+
+// ImportUsersFromExcel добавляет новых пользователей из Excel.
+func (h *UserHandler) ImportUsersFromExcel(c *gin.Context) {
+	fh, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Не передан файл"})
+		return
+	}
+	src, err := fh.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Не удалось открыть файл"})
+		return
+	}
+	defer src.Close()
+	data, err := io.ReadAll(src)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Не удалось прочитать файл"})
+		return
+	}
+	xl, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Не удалось прочитать Excel. Используйте .xlsx"})
+		return
+	}
+	defer func() { _ = xl.Close() }()
+
+	sheet := xl.GetSheetName(0)
+	if strings.TrimSpace(sheet) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "В файле отсутствует лист"})
+		return
+	}
+	rows, err := xl.GetRows(sheet)
+	if err != nil || len(rows) < 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "В файле нет данных для импорта"})
+		return
+	}
+
+	headerMap := map[string]int{}
+	for i, h := range rows[0] {
+		headerMap[strings.ToLower(strings.TrimSpace(h))] = i
+	}
+	requiredHeaders := []string{"фио", "организация", "почта", "пароль", "уровень доступа"}
+	for _, h := range requiredHeaders {
+		if _, ok := headerMap[h]; !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"message": fmt.Sprintf("Не найдена колонка «%s»", h)})
+			return
+		}
+	}
+
+	get := func(cols []string, row []string) string {
+		for _, col := range cols {
+			if idx, ok := headerMap[col]; ok && idx < len(row) {
+				return strings.TrimSpace(row[idx])
+			}
+		}
+		return ""
+	}
+
+	result := UserImportResult{Errors: []string{}}
+	allowedReq := map[string]struct{}{
+		"comment": {}, "shortName": {}, "initiator": {}, "responsible": {}, "sectionName": {},
+		"proposalText": {}, "problemComment": {}, "discussionSummary": {}, "implementationQueue": {},
+		"noteText": {}, "completedAt": {}, "ditOutgoing": {}, "attachments": {}, "deleteRequirement": {},
+	}
+	allowedGK := map[string]struct{}{
+		"gkContractEdit": {}, "gkStageEdit": {}, "gkFunctionEdit": {},
+	}
+
+	for i, row := range rows[1:] {
+		line := i + 2
+		fullName := get([]string{"фио"}, row)
+		organization := get([]string{"организация"}, row)
+		email := strings.ToLower(get([]string{"почта", "email"}, row))
+		password := get([]string{"пароль", "password"}, row)
+		accessLevel := get([]string{"уровень доступа", "access level"}, row)
+		isSuperuser := parseImportBool(get([]string{"суперпользователь", "superuser"}, row))
+		isActive := true
+		if val := get([]string{"активен", "is active"}, row); val != "" {
+			isActive = parseImportBool(val)
+		}
+
+		if fullName == "" || organization == "" || email == "" || password == "" || accessLevel == "" {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: заполните ФИО/Организация/Почта/Пароль/Уровень доступа", line))
+			continue
+		}
+		if len(password) < 6 {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: пароль должен быть не короче 6 символов", line))
+			continue
+		}
+		if !isAllowedOrganization(organization) {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: некорректная организация", line))
+			continue
+		}
+		if !isAllowedAccessLevel(accessLevel) {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: некорректный уровень доступа", line))
+			continue
+		}
+
+		var existing models.User
+		if err := h.db.Where("LOWER(email) = ?", email).First(&existing).Error; err == nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: пользователь с почтой %s уже существует", line, email))
+			continue
+		}
+
+		passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: ошибка хеширования пароля", line))
+			continue
+		}
+
+		reqGrants := parseCSVGrants(get([]string{"гранты карточки (csv)", "гранты карточки"}, row), allowedReq)
+		gkGrants := parseCSVGrants(get([]string{"гранты гк (csv)", "гранты гк"}, row), allowedGK)
+		if accessLevel != "edit" && !isSuperuser {
+			gkGrants = map[string]bool{}
+		}
+		if accessLevel == "read" {
+			delete(reqGrants, "deleteRequirement")
+		}
+
+		user := models.User{
+			FullName:               fullName,
+			Organization:           organization,
+			Email:                  email,
+			PasswordHash:           string(passwordHash),
+			AccessLevel:            accessLevel,
+			IsSuperuser:            isSuperuser,
+			IsActive:               isActive,
+			RequirementFieldGrants: encodeRequirementGrants(reqGrants),
+			GKDirectoryGrants:      encodeRequirementGrants(gkGrants),
+		}
+		if err := h.db.Create(&user).Error; err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: ошибка создания пользователя", line))
+			continue
+		}
+		result.Created++
+	}
+
+	c.JSON(http.StatusOK, result)
 }

@@ -62,19 +62,19 @@
                   Восстановить
                 </el-button>
 
-                <el-tooltip content="Удалить" placement="bottom">
-                  <el-button
-                    class="top-btn-delete"
-                    type="danger"
-                    plain
-                    size="small"
-                    :icon="Delete"
-                    :loading="deleteLoading"
-                    circle
-                    @click="handleDeleteRequirement"
-                  />
-                </el-tooltip>
               </template>
+              <el-tooltip v-if="canDeleteRequirements" content="Удалить" placement="bottom">
+                <el-button
+                  class="top-btn-delete"
+                  type="danger"
+                  plain
+                  size="small"
+                  :icon="Delete"
+                  :loading="deleteLoading"
+                  circle
+                  @click="handleDeleteRequirement"
+                />
+              </el-tooltip>
             </div>
           </div>
         </div>
@@ -712,6 +712,7 @@ const authStore = useAuthStore()
 const DEFAULT_QUEUE_NAME = 'Не определена'
 
 const canFullEdit = computed(() => authStore.canEditRequirementsFully)
+const canDeleteRequirements = computed(() => authStore.canDeleteRequirements)
 const canManageRequirementCard = computed(() => authStore.canManageRequirementCard)
 
 function fieldDisabled(key: string) {
@@ -1122,6 +1123,10 @@ async function handleRestore() {
 }
 
 async function handleDeleteRequirement() {
+  if (!canDeleteRequirements.value) {
+    ElMessage.warning('Недостаточно прав для удаления предложений')
+    return
+  }
   if (!item.value) return
   try {
     await ElMessageBox.confirm(

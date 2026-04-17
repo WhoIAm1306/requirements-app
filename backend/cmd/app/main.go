@@ -97,6 +97,20 @@ func main() {
 		read.GET("/contracts/attachments/:attachmentId/download", contractDirectoryHandler.DownloadContractAttachment)
 		read.GET("/queues", dictionaryHandler.ListQueues)
 
+		// Справочник ГК: суперюзер или гранты на конкретные сущности.
+		read.POST("/contracts", middleware.RequireGKContractEditOrSuperuser(), contractDirectoryHandler.CreateContract)
+		read.PUT("/contracts/:id", middleware.RequireGKContractEditOrSuperuser(), contractDirectoryHandler.UpdateContract)
+		read.POST("/contracts/:id/stages", middleware.RequireGKStageEditOrSuperuser(), contractDirectoryHandler.CreateStage)
+		read.POST("/contracts/:id/functions", middleware.RequireGKFunctionEditOrSuperuser(), contractDirectoryHandler.UpsertTZFunction)
+		read.POST("/contracts/:id/attachments", middleware.RequireGKFunctionEditOrSuperuser(), contractDirectoryHandler.UploadContractAttachments)
+		read.POST("/import/gk-tz-functions", middleware.RequireGKFunctionEditOrSuperuser(), contractDirectoryHandler.ImportTZFunctionsFromExcel)
+
+		// Удаление в справочнике ГК — только суперюзер.
+		read.DELETE("/contracts/attachments/:attachmentId", middleware.RequireSuperuser(), contractDirectoryHandler.DeleteContractAttachment)
+		read.DELETE("/contracts/:id/functions/:functionId", middleware.RequireSuperuser(), contractDirectoryHandler.DeleteTZFunction)
+		read.DELETE("/contracts/:id/stages/:stageNumber", middleware.RequireSuperuser(), contractDirectoryHandler.DeleteStage)
+		read.DELETE("/contracts/:id", middleware.RequireSuperuser(), contractDirectoryHandler.DeleteContract)
+
 		// Комментарий к предложению: edit/superuser или read с грантом comment (см. users.requirement_field_grants).
 		read.POST("/requirements/:id/comments", middleware.RequireCommentOrEdit(), requirementHandler.AddComment)
 		// Удаление комментария: edit/superuser или read с грантом comment.
@@ -109,6 +123,7 @@ func main() {
 		read.POST("/requirements/:id/attachments/from-library", middleware.RequireEditOrSuperuserOrAttachmentGrant(), requirementHandler.AttachRequirementFromLibrary)
 		read.POST("/requirements/:id/attachments", middleware.RequireEditOrSuperuserOrAttachmentGrant(), requirementHandler.UploadRequirementAttachments)
 		read.DELETE("/requirements/attachments/:attachmentId", middleware.RequireEditOrSuperuserOrAttachmentGrant(), requirementHandler.DeleteRequirementAttachment)
+		read.DELETE("/requirements/:id", middleware.RequireDeleteRequirementOrEditOrSuperuser(), requirementHandler.Delete)
 	}
 
 	// Маршруты изменения данных доступны только edit-пользователю или суперпользователю.
@@ -116,26 +131,13 @@ func main() {
 	edit.Use(authMw, middleware.RequireEditOrSuperuser())
 	{
 		edit.POST("/requirements", requirementHandler.Create)
-		edit.DELETE("/requirements/:id", requirementHandler.Delete)
 		edit.POST("/requirements/:id/archive", requirementHandler.Archive)
 		edit.POST("/requirements/:id/restore", requirementHandler.Restore)
-
-		edit.POST("/contracts", contractDirectoryHandler.CreateContract)
-		edit.PUT("/contracts/:id", contractDirectoryHandler.UpdateContract)
-		edit.POST("/contracts/:id/stages", contractDirectoryHandler.CreateStage)
-		edit.POST("/contracts/:id/functions", contractDirectoryHandler.UpsertTZFunction)
-		edit.POST("/contracts/:id/attachments", contractDirectoryHandler.UploadContractAttachments)
-
-		edit.DELETE("/contracts/attachments/:attachmentId", contractDirectoryHandler.DeleteContractAttachment)
-		edit.DELETE("/contracts/:id/functions/:functionId", contractDirectoryHandler.DeleteTZFunction)
-		edit.DELETE("/contracts/:id/stages/:stageNumber", contractDirectoryHandler.DeleteStage)
-		edit.DELETE("/contracts/:id", contractDirectoryHandler.DeleteContract)
 
 		edit.POST("/queues", dictionaryHandler.CreateQueue)
 
 		edit.POST("/import/requirements", requirementHandler.ImportRequirements)
 		edit.POST("/import/tz-points", dictionaryHandler.ImportTZPoints)
-		edit.POST("/import/gk-tz-functions", contractDirectoryHandler.ImportTZFunctionsFromExcel)
 	}
 
 	// Административные маршруты только для суперпользователя.
@@ -144,6 +146,8 @@ func main() {
 	admin.Use(authMw, middleware.RequireSuperuser())
 	{
 		admin.GET("/users", userHandler.ListUsers)
+		admin.GET("/users/export", userHandler.ExportUsers)
+		admin.POST("/users/import", userHandler.ImportUsersFromExcel)
 		admin.POST("/users", userHandler.CreateUser)
 		admin.PUT("/users/:id", userHandler.UpdateUser)
 		admin.DELETE("/users/:id", userHandler.DeleteUser)

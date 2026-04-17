@@ -44,6 +44,7 @@ type UserProfileResponse struct {
 	IsSuperuser            bool            `json:"isSuperuser"`
 	IsActive               bool            `json:"isActive"`
 	RequirementFieldGrants map[string]bool `json:"requirementFieldGrants,omitempty"`
+	GKDirectoryGrants      map[string]bool `json:"gkDirectoryGrants,omitempty"`
 }
 
 // LoginResponse — ответ после логина.
@@ -99,6 +100,7 @@ func userToProfile(user *models.User) UserProfileResponse {
 		IsSuperuser:            user.IsSuperuser,
 		IsActive:               user.IsActive,
 		RequirementFieldGrants: decodeRequirementGrantsJSON(user.RequirementFieldGrants),
+		GKDirectoryGrants:      decodeRequirementGrantsJSON(user.GKDirectoryGrants),
 	}
 }
 

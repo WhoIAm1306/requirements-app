@@ -181,6 +181,8 @@ type User struct {
 	AccessLevel  string `gorm:"size:20" json:"accessLevel"` // read / edit
 	// RequirementFieldGrants — JSON-объект флагов (comment, shortName, attachments, …) при access read.
 	RequirementFieldGrants string `gorm:"type:jsonb;default:'{}'" json:"requirementFieldGrants"`
+	// GKDirectoryGrants — JSON-объект прав на справочник ГК (gkContractEdit / gkStageEdit / gkFunctionEdit).
+	GKDirectoryGrants      string `gorm:"type:jsonb;default:'{}'" json:"gkDirectoryGrants"`
 	IsSuperuser            bool   `gorm:"default:false" json:"isSuperuser"`
 	IsActive               bool   `gorm:"default:true" json:"isActive"`
 	CreatedAt    time.Time `json:"createdAt"`

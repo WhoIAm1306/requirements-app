@@ -110,3 +110,37 @@ func RequireEditOrSuperuserOrAttachmentGrant() gin.HandlerFunc {
 		c.Abort()
 	}
 }
+
+// RequireDeleteRequirementOrEditOrSuperuser — удаление предложения:
+// superuser или edit с грантом deleteRequirement.
+func RequireDeleteRequirementOrEditOrSuperuser() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.GetBool("isSuperuser") {
+			c.Next()
+			return
+		}
+		raw, ok := c.Get("currentUser")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Не авторизован"})
+			c.Abort()
+			return
+		}
+		u, ok := raw.(*models.User)
+		if !ok || u == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Не авторизован"})
+			c.Abort()
+			return
+		}
+		if strings.TrimSpace(u.AccessLevel) != "edit" {
+			c.JSON(http.StatusForbidden, gin.H{"message": "Недостаточно прав для удаления предложений"})
+			c.Abort()
+			return
+		}
+		if UserHasRequirementGrant(u, "deleteRequirement") {
+			c.Next()
+			return
+		}
+		c.JSON(http.StatusForbidden, gin.H{"message": "Недостаточно прав для удаления предложений"})
+		c.Abort()
+	}
+}
