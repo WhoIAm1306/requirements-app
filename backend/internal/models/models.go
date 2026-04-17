@@ -10,6 +10,7 @@ import (
 // Requirement — основная сущность предложения.
 type Requirement struct {
 	ID                  uint       `gorm:"primaryKey" json:"id"`
+	SequenceNumber      uint       `gorm:"index" json:"sequenceNumber"`
 	TaskIdentifier      string     `gorm:"size:255;index" json:"taskIdentifier"`
 	ShortName           string     `gorm:"type:text" json:"shortName"`
 	Initiator           string     `gorm:"size:255" json:"initiator"`

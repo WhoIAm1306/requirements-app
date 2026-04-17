@@ -194,6 +194,7 @@ export interface CommentItem {
 // Карточка предложения.
 export interface Requirement {
   id: number
+  sequenceNumber: number
   taskIdentifier: string
   /** Подпись к ГК в списке (из справочника). */
   contractShortName?: string

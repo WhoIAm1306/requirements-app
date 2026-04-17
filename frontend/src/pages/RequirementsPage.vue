@@ -165,12 +165,6 @@
                 Телефония 101
               </el-button>
 
-              <el-tooltip content="Порядок списка по дате добавления записи (id)" placement="bottom">
-                <label class="list-sort-toggle">
-                  <span class="list-sort-toggle__label">Сначала новые</span>
-                  <el-switch v-model="listSortNewestFirst" class="list-sort-switch" />
-                </label>
-              </el-tooltip>
             </div>
 
             <div class="search-row">
@@ -219,6 +213,11 @@
                 <el-option label="Только архивные" value="archived_only" />
               </el-select>
 
+              <label class="sequence-sort-toggle">
+                <span class="sequence-sort-toggle__label">Сначала ранние</span>
+                <el-switch v-model="sequenceSortAsc" class="sequence-sort-switch" />
+              </label>
+
               <label class="filter-no-fn-toggle">
                 <span class="filter-no-fn-toggle__label">Функция не указана</span>
                 <el-switch v-model="filterNoFunction" class="filter-no-fn-switch" />
@@ -265,6 +264,7 @@
               <div class="requirements-header-sticky">
                 <table class="requirements-header-table" aria-hidden="true">
                   <colgroup>
+                    <col style="width: 56px" />
                     <col style="width: 150px" />
                     <col style="width: 330px" />
                     <col style="width: 180px" />
@@ -284,6 +284,7 @@
                   </colgroup>
                   <thead>
                     <tr>
+                      <th>№</th>
                       <th>ID</th>
                       <th>Наименование</th>
                       <th>Инициатор</th>
@@ -319,6 +320,7 @@
                 :show-header="false"
                 :style="{ width: `${tableWidth}px` }"
               >
+                <el-table-column prop="sequenceNumber" label="№" width="56" />
                 <el-table-column prop="taskIdentifier" label="ID" width="150" />
 
                 <el-table-column
@@ -569,14 +571,14 @@ const items = shallowRef<Requirement[]>([])
 const queues = ref<QueueItem[]>([])
 
 /** Сумма ширин колонок (table-layout: fixed). */
-const tableWidth = 3300
+const tableWidth = 3356
 
 /** Клиентская пагинация: меньше узлов в DOM → отзывчивее интерфейс. */
 const tablePage = ref(1)
 const tablePageSize = ref(50)
 
 const pagedItems = computed(() => {
-  const list = [...items.value].sort(compareRequirementsByIdentifier)
+  const list = [...items.value].sort(compareRequirementsBySequence)
   const start = (tablePage.value - 1) * tablePageSize.value
   return list.slice(start, start + tablePageSize.value)
 })
@@ -592,9 +594,8 @@ const listFilterPreset = ref<ListFilterPreset>('all')
 const implementationQueue = ref('')
 
 const filterNoFunction = ref(false)
+const sequenceSortAsc = ref(false)
 
-/** true — сначала новые (id desc), false — сначала старые (id asc). */
-const listSortNewestFirst = ref(true)
 
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -633,56 +634,11 @@ function shortText(value: string, maxLength = 80) {
   return text.slice(0, maxLength).trimEnd() + '...'
 }
 
-type IdentifierParts = {
-  prefix: string
-  numbers: number[]
-  normalized: string
-}
-
-function parseTaskIdentifier(raw: string): IdentifierParts | null {
-  const normalized = (raw || '').toUpperCase().replace(/\s+/g, '')
-  if (!normalized) return null
-
-  const prefixMatch = normalized.match(/^[^\d]+/)
-  const prefix = prefixMatch ? prefixMatch[0] : ''
-  const numbers = Array.from(normalized.matchAll(/\d+/g)).map((part) => Number(part[0]))
-
-  if (!prefix && numbers.length === 0) return null
-  return { prefix, numbers, normalized }
-}
-
-function compareIdentifierParts(a: IdentifierParts | null, b: IdentifierParts | null) {
-  if (!a && !b) return 0
-  if (!a) return 1
-  if (!b) return -1
-
-  const prefixCmp = a.prefix.localeCompare(b.prefix, 'ru')
-  if (prefixCmp !== 0) return prefixCmp
-
-  const maxLen = Math.max(a.numbers.length, b.numbers.length)
-  for (let i = 0; i < maxLen; i += 1) {
-    const an = a.numbers[i]
-    const bn = b.numbers[i]
-    if (an == null && bn == null) break
-    if (an == null) return -1
-    if (bn == null) return 1
-    if (an !== bn) return an - bn
-  }
-
-  return a.normalized.localeCompare(b.normalized, 'ru', { numeric: true })
-}
-
-function compareRequirementsByIdentifier(a: Requirement, b: Requirement) {
-  const forward = compareIdentifierParts(
-    parseTaskIdentifier(a.taskIdentifier || ''),
-    parseTaskIdentifier(b.taskIdentifier || ''),
-  )
-  if (forward !== 0) {
-    return listSortNewestFirst.value ? -forward : forward
-  }
-
+function compareRequirementsBySequence(a: Requirement, b: Requirement) {
+  const sequenceDiff = (a.sequenceNumber || 0) - (b.sequenceNumber || 0)
+  if (sequenceDiff !== 0) return sequenceSortAsc.value ? sequenceDiff : -sequenceDiff
   const idDiff = (a.id || 0) - (b.id || 0)
-  if (idDiff !== 0) return listSortNewestFirst.value ? -idDiff : idDiff
+  if (idDiff !== 0) return sequenceSortAsc.value ? idDiff : -idDiff
   return 0
 }
 
@@ -753,7 +709,7 @@ function resetFilters() {
   archiveFilterMode.value = 'active'
   implementationQueue.value = ''
   filterNoFunction.value = false
-  listSortNewestFirst.value = true
+  sequenceSortAsc.value = false
   tablePage.value = 1
   clearSearchDebounce()
   loadData()
@@ -827,7 +783,7 @@ async function loadData() {
       search: search.value || undefined,
       implementationQueue: implementationQueue.value || undefined,
       noFunction: filterNoFunction.value || undefined,
-      sortOrder: listSortNewestFirst.value ? 'desc' : 'asc',
+      sortOrder: sequenceSortAsc.value ? 'asc' : 'desc',
       ...arch,
     })
     if (seq !== loadListSeq) return
@@ -855,7 +811,7 @@ async function handleExport() {
       search: search.value || undefined,
       implementationQueue: implementationQueue.value || undefined,
       noFunction: filterNoFunction.value || undefined,
-      sortOrder: listSortNewestFirst.value ? 'desc' : 'asc',
+      sortOrder: sequenceSortAsc.value ? 'asc' : 'desc',
       ...arch,
     })
 
@@ -1035,17 +991,12 @@ watch(
 )
 
 watch(
-  [status, implementationQueue, archiveFilterMode, filterNoFunction],
+  [status, implementationQueue, archiveFilterMode, filterNoFunction, sequenceSortAsc],
   () => {
     clearSearchDebounce()
     debouncedReloadList()
   },
 )
-
-watch(listSortNewestFirst, () => {
-  clearSearchDebounce()
-  debouncedReloadList()
-})
 
 watch(search, () => {
   clearSearchDebounce()
@@ -1687,6 +1638,22 @@ onMounted(async () => {
   width: 170px;
   flex: 0 0 170px;
   min-width: 0;
+}
+
+.sequence-sort-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sequence-sort-toggle__label {
+  font-size: 13px;
+  color: #4b5565;
+}
+
+.sequence-sort-switch {
+  flex-shrink: 0;
 }
 
 .cell-clamp {

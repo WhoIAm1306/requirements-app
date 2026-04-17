@@ -16,7 +16,7 @@ export type RequirementListQuery = {
   archivedOnly?: boolean
   noFunction?: boolean
   implementationQueue?: string
-  /** Порядок по id: asc — старые сверху, desc — новые сверху. */
+  /** Порядок по порядковому номеру: asc — старые сверху, desc — новые сверху. */
   sortOrder?: 'asc' | 'desc'
 }
 

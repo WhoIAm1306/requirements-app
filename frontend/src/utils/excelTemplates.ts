@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx'
 
 const REQUIREMENTS_HEADERS = [
+  'Порядковый номер',
   'Идентификатор задачи',
   'Краткое наименование предложения',
   'Инициатор предложения',
@@ -21,6 +22,7 @@ const REQUIREMENTS_HEADERS = [
 export function downloadRequirementsTemplate() {
   const example1 = [
     '',
+    '',
     'Пример предложения',
     'ГБУ "Система 112"',
     'Иванов Иван Иванович',
@@ -39,6 +41,7 @@ export function downloadRequirementsTemplate() {
 
   const example2 = [
     '',
+    '',
     'Пример: статус после «Новое»',
     'ГБУ "Система 112"',
     'Петров Пётр Петрович',
@@ -56,6 +59,7 @@ export function downloadRequirementsTemplate() {
   ]
 
   const example3 = [
+    '',
     '',
     'Пример: раздел «Телефония» + система 112',
     '',

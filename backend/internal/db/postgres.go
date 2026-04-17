@@ -73,6 +73,8 @@ func NewPostgres(cfg *config.Config) (*gorm.DB, error) {
 		return nil, res.Error
 	}
 	_ = database.Exec(`UPDATE users SET requirement_field_grants = '{}'::jsonb WHERE requirement_field_grants IS NULL`)
+	// Миграция порядкового номера: для старых записей, где номер ещё не выставлен.
+	_ = database.Exec(`UPDATE requirements SET sequence_number = id WHERE COALESCE(sequence_number, 0) = 0`)
 
 	log.Println("database connected and migrated")
 	return database, nil

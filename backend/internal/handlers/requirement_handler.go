@@ -145,7 +145,7 @@ func applyRequirementTextSearch(db *gorm.DB, rawSearch string) *gorm.DB {
 // примечание/обсуждение в таблице не нужны — экономия IO и размер JSON.
 func applyRequirementListSQLSelect(db *gorm.DB) *gorm.DB {
 	return db.Select(
-		"id", "task_identifier", "short_name", "initiator", "responsible_person", "section_name",
+		"id", "sequence_number", "task_identifier", "short_name", "initiator", "responsible_person", "section_name",
 		"implementation_queue", "contract_name", "contract_tz_function_id",
 		"tz_point_text", "nmck_point_text", "status_text", "system_type",
 		"created_at", "updated_at", "completed_at", "dit_outgoing_number", "dit_outgoing_date",
@@ -155,6 +155,14 @@ func applyRequirementListSQLSelect(db *gorm.DB) *gorm.DB {
 		"LEFT(COALESCE(proposal_text, ''), 520) AS proposal_text",
 		"LEFT(COALESCE(problem_comment, ''), 520) AS problem_comment",
 	)
+}
+
+func (h *RequirementHandler) nextSequenceNumber(tx *gorm.DB) (uint, error) {
+	var maxSeq uint
+	if err := tx.Model(&models.Requirement{}).Select("COALESCE(MAX(sequence_number), 0)").Scan(&maxSeq).Error; err != nil {
+		return 0, err
+	}
+	return maxSeq + 1, nil
 }
 
 type CreateRequirementRequest struct {
@@ -379,9 +387,9 @@ func (h *RequirementHandler) List(c *gin.Context) {
 
 	sortOrder := strings.ToLower(strings.TrimSpace(c.Query("sortOrder")))
 	if sortOrder == "asc" {
-		query = query.Order("id asc")
+		query = query.Order("sequence_number asc").Order("id asc")
 	} else {
-		query = query.Order("id desc")
+		query = query.Order("sequence_number desc").Order("id desc")
 	}
 
 	// Узкий SELECT: без тяжёлых TEXT целиком — LEFT в БД (Postgres), без note/discussion в таблице.
@@ -571,7 +579,14 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		item.NmckPointText = strings.TrimSpace(selectedFunction.NMCKFunctionNumber)
 	}
 
-	if err := h.db.Create(&item).Error; err != nil {
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		seq, err := h.nextSequenceNumber(tx)
+		if err != nil {
+			return err
+		}
+		item.SequenceNumber = seq
+		return tx.Create(&item).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка создания предложения"})
 		return
 	}
@@ -1083,7 +1098,38 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 			ContractName:        contractName,
 		}
 
-		if err := h.db.Create(&item).Error; err != nil {
+		sequenceRaw := getCellByHeader(row, headerMap, "Порядковый номер", "Порядковый№", "№")
+		var explicitSequence uint
+		if strings.TrimSpace(sequenceRaw) != "" {
+			sequenceValue, convErr := strconv.ParseUint(strings.TrimSpace(sequenceRaw), 10, 64)
+			if convErr != nil || sequenceValue == 0 {
+				result.Failed++
+				result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: некорректный порядковый номер", lineNumber))
+				continue
+			}
+			explicitSequence = uint(sequenceValue)
+		}
+
+		if err := h.db.Transaction(func(tx *gorm.DB) error {
+			if explicitSequence > 0 {
+				var n int64
+				err := tx.Model(&models.Requirement{}).Where("sequence_number = ?", explicitSequence).Count(&n).Error
+				if err != nil {
+					return err
+				}
+				if n > 0 {
+					return fmt.Errorf("порядковый номер уже используется")
+				}
+				item.SequenceNumber = explicitSequence
+			} else {
+				seq, err := h.nextSequenceNumber(tx)
+				if err != nil {
+					return err
+				}
+				item.SequenceNumber = seq
+			}
+			return tx.Create(&item).Error
+		}); err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, fmt.Sprintf("Строка %d: ошибка сохранения: %v", lineNumber, err))
 			continue
@@ -1130,9 +1176,9 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 
 	sortOrder := strings.ToLower(strings.TrimSpace(c.Query("sortOrder")))
 	if sortOrder == "asc" {
-		query = query.Order("id asc")
+		query = query.Order("sequence_number asc").Order("id asc")
 	} else {
-		query = query.Order("id desc")
+		query = query.Order("sequence_number desc").Order("id desc")
 	}
 
 	if err := query.Find(&items).Error; err != nil {
@@ -1147,6 +1193,7 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 	file.SetSheetName("Sheet1", sheetName)
 
 	headers := []string{
+		"Порядковый номер",
 		"Идентификатор задачи",
 		"Краткое наименование предложения",
 		"Инициатор предложения",
@@ -1177,6 +1224,7 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 		row := rowIndex + 2
 
 		values := []interface{}{
+			item.SequenceNumber,
 			item.TaskIdentifier,
 			item.ShortName,
 			item.Initiator,
@@ -1204,12 +1252,13 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 		}
 	}
 
-	_ = file.SetColWidth(sheetName, "A", "A", 20)
-	_ = file.SetColWidth(sheetName, "B", "B", 40)
-	_ = file.SetColWidth(sheetName, "C", "E", 24)
-	_ = file.SetColWidth(sheetName, "F", "H", 50)
-	_ = file.SetColWidth(sheetName, "I", "L", 28)
-	_ = file.SetColWidth(sheetName, "M", "O", 22)
+	_ = file.SetColWidth(sheetName, "A", "A", 14)
+	_ = file.SetColWidth(sheetName, "B", "B", 20)
+	_ = file.SetColWidth(sheetName, "C", "C", 40)
+	_ = file.SetColWidth(sheetName, "D", "F", 24)
+	_ = file.SetColWidth(sheetName, "G", "I", 50)
+	_ = file.SetColWidth(sheetName, "J", "M", 28)
+	_ = file.SetColWidth(sheetName, "N", "P", 22)
 
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	c.Header("Content-Disposition", `attachment; filename="requirements_export.xlsx"`)
