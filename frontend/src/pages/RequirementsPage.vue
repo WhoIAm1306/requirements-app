@@ -320,7 +320,12 @@
                 :show-header="false"
                 :style="{ width: `${tableWidth}px` }"
               >
-                <el-table-column prop="sequenceNumber" label="№" width="56" />
+                <el-table-column
+                  prop="sequenceNumber"
+                  label="№"
+                  width="56"
+                  class-name="sequence-col"
+                />
                 <el-table-column prop="taskIdentifier" label="ID" width="150" />
 
                 <el-table-column
@@ -1682,6 +1687,11 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   font-weight: 500;
+}
+
+.requirements-table :deep(td.sequence-col .cell) {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 @media (max-width: 1365px) {
