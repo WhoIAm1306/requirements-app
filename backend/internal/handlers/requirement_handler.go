@@ -790,6 +790,74 @@ func (h *RequirementHandler) AddComment(c *gin.Context) {
 	c.JSON(http.StatusCreated, comment)
 }
 
+// DeleteComment — удалить комментарий из карточки предложения.
+// Комментарии удаляются физически, а summary поля предложения пересчитывается по последнему комментарию.
+func (h *RequirementHandler) DeleteComment(c *gin.Context) {
+	requirementID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный id предложения"})
+		return
+	}
+
+	commentID, err := strconv.ParseUint(c.Param("commentId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный id комментария"})
+		return
+	}
+
+	var req models.Requirement
+	if err := h.db.First(&req, requirementID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Предложение не найдено"})
+		return
+	}
+
+	var comment models.Comment
+	if err := h.db.
+		Where("id = ? AND requirement_id = ?", commentID, requirementID).
+		First(&comment).
+		Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"message": "Комментарий не найден"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения комментария"})
+		return
+	}
+
+	userName := c.GetString("userName")
+	userOrg := c.GetString("userOrg")
+
+	if err := h.db.Delete(&comment).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка удаления комментария"})
+		return
+	}
+
+	// Пересчёт summary: берём последний комментарий (по времени создания).
+	var lastComment models.Comment
+	summary := ""
+	err = h.db.
+		Where("requirement_id = ?", requirementID).
+		Order("created_at desc").
+		First(&lastComment).
+		Error
+	if err == nil {
+		summary = strings.TrimSpace(lastComment.CommentText)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения последнего комментария"})
+		return
+	}
+
+	req.DiscussionSummary = summary
+	req.LastEditedBy = userName
+	req.LastEditedOrg = userOrg
+	if err := h.db.Save(&req).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка обновления карточки"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Комментарий удалён"})
+}
+
 func normalizeHeader(value string) string {
 	value = strings.TrimSpace(strings.ToLower(value))
 	value = strings.ReplaceAll(value, "\n", " ")
@@ -914,8 +982,13 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 			"Краткое наименование предложения",
 		)
 
+		// В разных версиях шаблонов/экспорта колонка очереди могла называться по-разному.
+		// Алиасы нужны, чтобы импорт не падал из-за несовпадения заголовков.
 		queueValue := getCellByHeader(row, headerMap,
 			"Номер очереди при реализации",
+			"Приоритет (очередь)",
+			"Приоритет",
+			"Очередь",
 		)
 
 		if shortName == "" {

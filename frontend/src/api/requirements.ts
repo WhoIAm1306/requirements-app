@@ -72,6 +72,13 @@ export async function addRequirementComment(id: number, commentText: string) {
 }
 
 /**
+ * Удаление комментария к предложению.
+ */
+export async function deleteRequirementComment(id: number, commentId: number) {
+  await apiClient.delete(`/requirements/${id}/comments/${commentId}`)
+}
+
+/**
  * Архивирование предложения.
  */
 export async function archiveRequirement(id: number) {

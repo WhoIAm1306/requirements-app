@@ -52,7 +52,7 @@ func Load() *Config {
 		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
 
 		SuperuserFullName:     getEnv("SUPERUSER_FULL_NAME", "Системный администратор"),
-		SuperuserOrganization: getEnv("SUPERUSER_ORGANIZATION", "ДИТ"),
+		SuperuserOrganization: getEnv("SUPERUSER_ORGANIZATION", "Танто-С"),
 		SuperuserEmail:        getEnv("SUPERUSER_EMAIL", "admin@example.com"),
 		SuperuserPassword:     getEnv("SUPERUSER_PASSWORD", "Admin123456"),
 	}

@@ -87,8 +87,9 @@
 
               <template #footer>
                 <div class="queue-select-footer">
-                  <el-button text bg size="small" @click="openAddQueueDialog">
-                    Добавить очередь
+                  <el-button class="queue-select-add-btn" text @click="openAddQueueDialog">
+                    <span class="queue-select-add-btn__plus">+</span>
+                    <span>Добавить новую очередь</span>
                   </el-button>
                 </div>
               </template>
@@ -160,39 +161,61 @@
         </el-select>
       </el-form-item>
 
+      <div class="tz-mode-toggle">
+        <label class="tz-mode-toggle__row">
+          <span class="tz-mode-toggle__label">Выбрать через ТЗ</span>
+          <el-switch v-model="selectViaTz" :disabled="!selectedStageNumber" />
+        </label>
+      </div>
+
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item label="п.п. НМЦК — функция">
+          <el-form-item label="п.п. НМЦК">
             <el-select
-              v-model="selectedFunctionId"
-              placeholder="Сначала выберите этап"
+              v-model="selectedNmckFunctionId"
+              :placeholder="selectViaTz ? 'Сначала выберите п.п. ТЗ' : 'Сначала выберите этап'"
               style="width: 100%"
-              :disabled="!selectedStageNumber"
+              :disabled="nmckSelectDisabled"
               filterable
               clearable
-              @change="handleFunctionSelected"
+              @change="handleNmckSelected"
             >
               <el-option
-                v-for="fn in functions"
-                :key="fn.id"
-                :label="nmckFunctionOptionLabel(fn)"
-                :value="fn.id"
+                v-for="opt in nmckFunctionOptions"
+                :key="opt.value"
+                :label="opt.label"
+                :value="opt.value"
               />
               <template #empty>
-                <span class="select-empty">Для выбранного этапа нет функций в справочнике ГК.</span>
+                <span class="select-empty">{{ nmckEmptyText }}</span>
               </template>
             </el-select>
           </el-form-item>
         </el-col>
         <el-col :span="12">
           <el-form-item label="п.п. ТЗ">
+            <el-select
+              v-if="selectViaTz"
+              v-model="selectedTzSectionNumber"
+              placeholder="Сначала выберите этап"
+              style="width: 100%"
+              :disabled="!selectedStageNumber"
+              filterable
+              clearable
+              @change="handleTzSelected"
+            >
+              <el-option v-for="opt in tzSectionOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+              <template #empty>
+                <span class="select-empty">Для выбранного этапа нет пунктов ТЗ.</span>
+              </template>
+            </el-select>
             <el-input
+              v-else
               :model-value="form.tzPointText"
               type="textarea"
-              :rows="2"
-              readonly
-              disabled
-              placeholder="Подставится после выбора функции НМЦК"
+              :autosize="{ minRows: 1, maxRows: 4 }"
+              :readonly="true"
+              placeholder="Подставится после выбора п.п. НМЦК"
               class="tz-autofill-input"
             />
           </el-form-item>
@@ -237,7 +260,8 @@
         <el-input
           v-model="form.noteText"
           type="textarea"
-          :autosize="{ minRows: 3, maxRows: 12 }"
+          :autosize="{ minRows: 1, maxRows: 12 }"
+          class="note-textarea"
         />
       </el-form-item>
     </el-form>
@@ -284,7 +308,9 @@ const selectedContractId = ref<number | null>(null)
 const stages = ref<GKStage[]>([])
 const functions = ref<GKFunction[]>([])
 const selectedStageNumber = ref<number | null>(null)
-const selectedFunctionId = ref<number | null>(null)
+const selectViaTz = ref(false)
+const selectedTzSectionNumber = ref('')
+const selectedNmckFunctionId = ref<number | null>(null)
 
 const emptyForm = (): RequirementPayload => ({
   taskIdentifier: '',
@@ -337,7 +363,9 @@ watch(
       stages.value = []
       functions.value = []
       selectedStageNumber.value = null
-      selectedFunctionId.value = null
+      selectViaTz.value = false
+      selectedTzSectionNumber.value = ''
+      selectedNmckFunctionId.value = null
       if (queues.value.length && !form.implementationQueue) {
         form.implementationQueue = queues.value[0].name
       }
@@ -395,7 +423,9 @@ async function onContractChange(value: string | null | undefined) {
   selectedContractId.value = id
 
   selectedStageNumber.value = null
-  selectedFunctionId.value = null
+  selectViaTz.value = false
+  selectedTzSectionNumber.value = ''
+  selectedNmckFunctionId.value = null
   stages.value = []
   functions.value = []
 
@@ -409,7 +439,9 @@ async function onContractChange(value: string | null | undefined) {
 }
 
 async function handleStageChange(stageNumber: number | null) {
-  selectedFunctionId.value = null
+  selectViaTz.value = false
+  selectedTzSectionNumber.value = ''
+  selectedNmckFunctionId.value = null
   functions.value = []
   form.contractTZFunctionId = null
   form.tzPointText = ''
@@ -419,21 +451,79 @@ async function handleStageChange(stageNumber: number | null) {
   functions.value = await fetchGKFunctionsForStage(selectedContractId.value, stageNumber)
 }
 
-function handleFunctionSelected(functionId: number | null) {
-  if (!functionId) {
+function handleTzSelected(tzValue: string | null) {
+  const tz = tzValue ? tzValue.trim() : ''
+  selectedTzSectionNumber.value = tz
+
+  selectedNmckFunctionId.value = null
+
+  form.contractTZFunctionId = null
+  form.tzPointText = tz
+  form.nmckPointText = ''
+}
+
+function syncFunctionSelection(fn: GKFunction | null) {
+  if (!fn) {
     form.contractTZFunctionId = null
-    form.tzPointText = ''
+    form.tzPointText = selectViaTz.value ? selectedTzSectionNumber.value || '' : ''
     form.nmckPointText = ''
     return
   }
 
-  const fn = functions.value.find((x) => x.id === functionId)
-  if (!fn) return
-
-  form.contractTZFunctionId = functionId
-  form.tzPointText = `${fn.tzSectionNumber} — ${fn.functionName}`
+  selectedTzSectionNumber.value = (fn.tzSectionNumber || '').trim()
+  form.contractTZFunctionId = fn.id
+  form.tzPointText = (fn.tzSectionNumber || '').trim()
   form.nmckPointText = (fn.nmckFunctionNumber || '').trim()
 }
+
+function handleNmckSelected(functionId: number | null) {
+  selectedNmckFunctionId.value = functionId
+  const fn = functions.value.find((x) => x.id === functionId) || null
+  syncFunctionSelection(fn)
+}
+
+const tzSectionOptions = computed(() => {
+  const byTz = new Map<string, GKFunction>()
+  for (const fn of functions.value) {
+    const tz = (fn.tzSectionNumber || '').trim()
+    if (tz && !byTz.has(tz)) byTz.set(tz, fn)
+  }
+
+  return Array.from(byTz.entries()).map(([tz, fn]) => ({
+    value: tz,
+    label: fn.functionName ? `${tz} — ${fn.functionName}` : tz,
+  }))
+})
+
+const nmckFunctionOptions = computed(() => {
+  const tz = (selectedTzSectionNumber.value || '').trim()
+  const list =
+    selectViaTz.value && tz
+      ? functions.value.filter((fn) => (fn.tzSectionNumber || '').trim() === tz)
+      : functions.value
+
+  const byId = new Map<number, GKFunction>()
+  for (const fn of list) {
+    if ((fn.nmckFunctionNumber || '').trim()) byId.set(fn.id, fn)
+  }
+
+  return Array.from(byId.values()).map((fn) => ({
+    value: fn.id,
+    label: nmckFunctionOptionLabel(fn),
+  }))
+})
+
+const nmckSelectDisabled = computed(() => {
+  if (!selectedStageNumber.value) return true
+  if (selectViaTz.value && !selectedTzSectionNumber.value) return true
+  return false
+})
+
+const nmckEmptyText = computed(() => {
+  if (!selectedStageNumber.value) return 'Сначала выберите этап.'
+  if (selectViaTz.value && !selectedTzSectionNumber.value) return 'Сначала выберите п.п. ТЗ.'
+  return 'Для выбранных параметров нет значений НМЦК.'
+})
 
 async function submit() {
   try {
@@ -476,9 +566,29 @@ function onSystemTypeChange() {
 }
 
 .queue-select-footer {
-  padding-top: 8px;
+  margin: 6px -12px -8px;
+  padding: 8px 8px 6px;
+  border-top: 1px solid var(--el-border-color-lighter);
   display: flex;
+}
+
+.queue-select-add-btn {
+  width: 100%;
   justify-content: flex-start;
+  color: var(--el-color-primary);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.queue-select-add-btn:hover {
+  background: var(--el-color-primary-light-9);
+}
+
+.queue-select-add-btn__plus {
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 600;
+  margin-right: 8px;
 }
 
 .select-empty {
@@ -487,6 +597,22 @@ function onSystemTypeChange() {
   font-size: 13px;
   color: #5c6b7f;
   line-height: 1.4;
+}
+
+.tz-mode-toggle {
+  margin-bottom: 10px;
+}
+
+.tz-mode-toggle__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tz-mode-toggle__label {
+  font-size: 13px;
+  color: #4b5565;
 }
 
 .field-hint {
@@ -499,6 +625,17 @@ function onSystemTypeChange() {
 :deep(.tz-autofill-input.is-disabled .el-textarea__inner) {
   color: var(--el-text-color-regular);
   -webkit-text-fill-color: var(--el-text-color-regular);
+}
+
+/* Readonly вместо disabled: нужно сохранить возможность выделения/копирования текста. */
+:deep(.tz-autofill-input .el-textarea__inner[readonly]) {
+  color: var(--el-text-color-regular);
+  -webkit-text-fill-color: var(--el-text-color-regular);
+}
+
+/* Минимальная высота для «Примечание». */
+:deep(.note-textarea .el-textarea__inner) {
+  min-height: 30px;
 }
 
 </style>

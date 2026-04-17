@@ -5,10 +5,98 @@
       <div class="page-header">
         <div class="page-header-left">
           <div class="page-title-row">
-            <h2 class="page-title">Учет предложений</h2>
+            <div class="page-title-block">
+              <h2 class="page-title">Учет предложений</h2>
+              <div class="meta">{{ authStore.fullName }}</div>
+            </div>
+            <el-popover
+              trigger="hover"
+              placement="bottom-start"
+              popper-class="summary-popover-popper"
+              :popper-style="{
+                width: 'fit-content',
+                maxWidth: 'calc(100vw - 24px)',
+              }"
+            >
+              <template #reference>
+                <el-card class="summary-card summary-card--main" shadow="hover">
+                  <div class="summary-main-inline">
+                    <span class="summary-label summary-label--inline">Всего записей</span>
+                    <span class="summary-value summary-value--inline">{{ items.length }}</span>
+                  </div>
+                </el-card>
+              </template>
+              <div class="summary-popover-grid">
+                <div class="summary-popover-row summary-popover-row--statuses">
+                  <el-card class="summary-card summary-card--mini status-card--processing" shadow="hover">
+                    <div class="summary-main-inline">
+                      <span class="summary-label summary-label--inline">В обработку</span>
+                      <span class="summary-value summary-value--inline">{{ countByStatus('В обработку') }}</span>
+                    </div>
+                  </el-card>
+                  <el-card class="summary-card summary-card--mini status-card--new" shadow="hover">
+                    <div class="summary-main-inline">
+                      <span class="summary-label summary-label--inline">Новое</span>
+                      <span class="summary-value summary-value--inline">{{ countByStatus('Новое') }}</span>
+                    </div>
+                  </el-card>
+                  <el-card class="summary-card summary-card--mini status-card--discussion" shadow="hover">
+                    <div class="summary-main-inline">
+                      <span class="summary-label summary-label--inline">Требуется обсуждение</span>
+                      <span class="summary-value summary-value--inline">
+                        {{ countByStatus('Требуется обсуждение') }}
+                      </span>
+                    </div>
+                  </el-card>
+                  <el-card class="summary-card summary-card--mini status-card--accounted" shadow="hover">
+                    <div class="summary-main-inline">
+                      <span class="summary-label summary-label--inline">Учтено</span>
+                      <span class="summary-value summary-value--inline">{{ countByStatus('Учтено') }}</span>
+                    </div>
+                  </el-card>
+                  <el-card class="summary-card summary-card--mini status-card--done" shadow="hover">
+                    <div class="summary-main-inline">
+                      <span class="summary-label summary-label--inline">Выполнено</span>
+                      <span class="summary-value summary-value--inline">{{ countByStatus('Выполнено') }}</span>
+                    </div>
+                  </el-card>
+                  <el-card class="summary-card summary-card--mini status-card--other" shadow="hover">
+                    <div class="summary-main-inline">
+                      <span class="summary-label summary-label--inline">Другие</span>
+                      <span class="summary-value summary-value--inline">
+                        {{
+                          items.filter((item) => !isStandardRequirementStatus((item.statusText || '').trim()))
+                            .length
+                        }}
+                      </span>
+                    </div>
+                  </el-card>
+                </div>
+
+                <div class="summary-popover-row summary-popover-row--queues">
+                  <el-card
+                    v-for="queue in queues"
+                    :key="queue.id"
+                    class="summary-card summary-card--mini"
+                    :class="queueSummaryCardClass(queue.name)"
+                    shadow="hover"
+                  >
+                    <div class="summary-main-inline">
+                      <span class="summary-label summary-label--inline">{{ queue.name }}</span>
+                      <span class="summary-value summary-value--inline">{{ countByQueue(queue.name) }}</span>
+                    </div>
+                  </el-card>
+                  <el-card class="summary-card summary-card--mini queue-card--default" shadow="hover">
+                    <div class="summary-main-inline">
+                      <span class="summary-label summary-label--inline">Другие очереди</span>
+                      <span class="summary-value summary-value--inline">{{ countOtherQueues() }}</span>
+                    </div>
+                  </el-card>
+                </div>
+              </div>
+            </el-popover>
             <span class="meta-badge">{{ authStore.organization }}</span>
           </div>
-          <div class="meta">{{ authStore.fullName }}</div>
         </div>
 
         <div class="header-actions">
@@ -39,54 +127,6 @@
             </template>
           </el-dropdown>
         </div>
-      </div>
-
-      <!-- Дашборд -->
-      <div class="summary-grid-all">
-        <el-card class="summary-card" shadow="hover">
-          <div class="summary-label">Всего записей</div>
-          <div class="summary-value">{{ items.length }}</div>
-        </el-card>
-
-        <el-card class="summary-card" shadow="hover">
-          <div class="summary-label">В обработку</div>
-          <div class="summary-value">{{ countByStatus('В обработку') }}</div>
-        </el-card>
-
-        <el-card class="summary-card" shadow="hover">
-          <div class="summary-label">Новое</div>
-          <div class="summary-value">{{ countByStatus('Новое') }}</div>
-        </el-card>
-
-        <el-card class="summary-card" shadow="hover">
-          <div class="summary-label">Учтено</div>
-          <div class="summary-value">{{ countByStatus('Учтено') }}</div>
-        </el-card>
-
-        <el-card class="summary-card" shadow="hover">
-          <div class="summary-label">Выполнено</div>
-          <div class="summary-value">{{ countByStatus('Выполнено') }}</div>
-        </el-card>
-
-        <el-card class="summary-card" shadow="hover">
-          <div class="summary-label">Другие статусы</div>
-          <div class="summary-value">
-            {{
-              items.filter((item) => !isStandardRequirementStatus((item.statusText || '').trim()))
-                .length
-            }}
-          </div>
-        </el-card>
-
-        <el-card
-          v-for="queue in queues"
-          :key="queue.id"
-          class="summary-card queue-summary-card"
-          shadow="hover"
-        >
-          <div class="summary-label">{{ queue.name }}</div>
-          <div class="summary-value">{{ countByQueue(queue.name) }}</div>
-        </el-card>
       </div>
 
       <!-- Фильтры -->
@@ -126,13 +166,10 @@
               </el-button>
 
               <el-tooltip content="Порядок списка по дате добавления записи (id)" placement="bottom">
-                <el-switch
-                  v-model="listSortNewestFirst"
-                  inline-prompt
-                  active-text="Сначала новые"
-                  inactive-text="Сначала старые"
-                  class="list-sort-switch list-sort-switch--toolbar"
-                />
+                <label class="list-sort-toggle">
+                  <span class="list-sort-toggle__label">Сначала новые</span>
+                  <el-switch v-model="listSortNewestFirst" class="list-sort-switch" />
+                </label>
               </el-tooltip>
             </div>
 
@@ -182,9 +219,10 @@
                 <el-option label="Только архивные" value="archived_only" />
               </el-select>
 
-              <el-checkbox v-model="filterNoFunction" class="filter-no-fn">
-                Функция не указана
-              </el-checkbox>
+              <label class="filter-no-fn-toggle">
+                <span class="filter-no-fn-toggle__label">Функция не указана</span>
+                <el-switch v-model="filterNoFunction" class="filter-no-fn-switch" />
+              </label>
 
               <el-tooltip content="Сбросить фильтры" placement="top">
                 <el-button class="reset-filters-btn" circle size="small" @click="resetFilters">
@@ -682,6 +720,23 @@ function countByQueue(queueName: string) {
   return items.value.filter((item) => (item.implementationQueue || '').trim() === queueName).length
 }
 
+function countOtherQueues() {
+  const knownQueues = new Set(queues.value.map((queue) => (queue.name || '').trim()).filter(Boolean))
+  return items.value.filter((item) => {
+    const queueName = (item.implementationQueue || '').trim()
+    if (!queueName) return false
+    return !knownQueues.has(queueName)
+  }).length
+}
+
+function queueSummaryCardClass(queueName: string) {
+  const value = (queueName || '').trim().toLowerCase()
+  if (value.includes('1')) return 'queue-card--1'
+  if (value.includes('2')) return 'queue-card--2'
+  if (value.includes('3')) return 'queue-card--3'
+  return 'queue-card--default'
+}
+
 /**
  * Загрузка очередей.
  */
@@ -994,8 +1049,8 @@ onMounted(async () => {
 }
 
 .page-header-left {
-  display: grid;
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
 
@@ -1005,6 +1060,14 @@ onMounted(async () => {
   gap: 10px;
   flex-wrap: wrap;
   min-width: 0;
+}
+
+.page-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 56px;
+  justify-content: center;
 }
 
 .page-title {
@@ -1019,17 +1082,19 @@ onMounted(async () => {
 .meta {
   color: #667085;
   font-size: 14px;
+  margin-top: 0;
 }
 
 .meta-badge {
   display: inline-flex;
   align-items: center;
   padding: 6px 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: #e2eaf4;
   color: #1e4d7b;
   font-size: 13px;
   font-weight: 600;
+  align-self: center;
 }
 
 .header-actions {
@@ -1100,6 +1165,58 @@ onMounted(async () => {
 .filter-no-fn {
   margin-right: 4px;
   white-space: nowrap;
+}
+
+.filter-no-fn-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.filter-no-fn-toggle__label {
+  font-size: 13px;
+  color: #4b5565;
+}
+
+.filter-no-fn-switch :deep(.el-switch__core) {
+  height: 18px;
+}
+
+.filter-no-fn-switch :deep(.el-switch__core::after) {
+  width: 12px;
+  height: 12px;
+}
+
+.list-sort-switch :deep(.el-switch__core) {
+  height: 18px;
+}
+
+.list-sort-switch :deep(.el-switch__core::after) {
+  width: 12px;
+  height: 12px;
+}
+
+.list-sort-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #4b5565;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.list-sort-toggle__label {
+  line-height: 1;
+}
+
+.list-sort-checkbox {
+  display: inline-flex;
+  align-items: center;
+}
+
+.list-sort-checkbox :deep(.el-checkbox__label) {
+  display: none;
 }
 
 .user-avatar-btn {
@@ -1173,6 +1290,14 @@ onMounted(async () => {
   padding: 12px 14px;
 }
 
+.summary-main-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
 .summary-label {
   color: #667085;
   font-size: 12px;
@@ -1180,11 +1305,125 @@ onMounted(async () => {
   line-height: 1.2;
 }
 
+.summary-label--inline {
+  margin-bottom: 0;
+}
+
 .summary-value {
   font-size: 22px;
   font-weight: 700;
   line-height: 1;
   color: #1f2937;
+}
+
+.summary-value--inline {
+  font-size: 20px;
+}
+
+.summary-card--main {
+  width: 168px;
+  height: 56px;
+  cursor: default;
+  margin-top: 0;
+}
+
+.summary-card--main :deep(.el-card__body) {
+  height: 100%;
+  padding: 8px 12px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+}
+
+.summary-popover-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  box-sizing: border-box;
+  width: max-content;
+}
+
+.summary-popover-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 168px;
+  gap: 12px;
+  width: max-content;
+}
+
+.summary-popover-row--statuses,
+.summary-popover-row--queues {
+  align-items: center;
+}
+
+.summary-card--mini {
+  width: 168px;
+}
+
+.summary-card--mini :deep(.el-card__body) {
+  padding: 10px 12px;
+}
+
+.status-card--processing {
+  background: var(--el-color-warning-light-9);
+  border-color: var(--el-color-warning-light-7);
+}
+
+.status-card--new {
+  background: var(--el-fill-color-lighter);
+  border-color: var(--el-border-color);
+}
+
+.status-card--discussion {
+  background: var(--el-color-danger-light-9);
+  border-color: var(--el-color-danger-light-7);
+}
+
+.status-card--accounted {
+  background: var(--el-color-success-light-9);
+  border-color: var(--el-color-success-light-7);
+}
+
+.status-card--done {
+  background: var(--el-color-primary-light-9);
+  border-color: var(--el-color-primary-light-7);
+}
+
+.status-card--other {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+}
+
+.queue-card--1 {
+  background: #f9dfe8;
+  border-color: #f2c6d4;
+}
+
+.queue-card--2 {
+  background: #fff4cc;
+  border-color: #f3e3a2;
+}
+
+.queue-card--3 {
+  background: #dff5df;
+  border-color: #c5e7c7;
+}
+
+.queue-card--default {
+  background: #eef2f7;
+  border-color: #dde3eb;
+}
+
+/* Полу-прозрачный контейнер поповера. */
+:deep(.summary-popover-popper) {
+  background: rgba(255, 255, 255, 0.78) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid #e7ecf3;
+  border-radius: 14px;
+  width: fit-content !important;
+  max-width: calc(100vw - 24px) !important;
+  overflow: hidden;
 }
 
 .toolbar-card,

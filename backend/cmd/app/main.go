@@ -99,6 +99,8 @@ func main() {
 
 		// Комментарий к предложению: edit/superuser или read с грантом comment (см. users.requirement_field_grants).
 		read.POST("/requirements/:id/comments", middleware.RequireCommentOrEdit(), requirementHandler.AddComment)
+		// Удаление комментария: edit/superuser или read с грантом comment.
+		read.DELETE("/requirements/:id/comments/:commentId", middleware.RequireCommentOrEdit(), requirementHandler.DeleteComment)
 
 		// Обновление карточки: edit/superuser или read с грантами на поля (кроме одного только comment).
 		read.PUT("/requirements/:id", middleware.RequireEditOrSuperuserOrRequirementPUTGrants(), requirementHandler.Update)
