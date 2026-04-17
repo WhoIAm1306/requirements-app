@@ -177,7 +177,7 @@ onMounted(() => {
   min-height: 100vh;
   background:
     radial-gradient(circle at top left, #f4f8ff 0%, #f7f9fc 35%, #f3f5f8 100%);
-  padding: 16px;
+  padding: 10px 15px 5px 15px;
 }
 
 .page-shell {

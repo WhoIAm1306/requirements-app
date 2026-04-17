@@ -1020,7 +1020,7 @@ onMounted(async () => {
   width: 100%;
   overflow-x: hidden;
   background: linear-gradient(165deg, #e8eef6 0%, #f2f5f9 40%, #edf1f7 100%);
-  padding: 16px;
+  padding: 10px 15px 5px 15px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
