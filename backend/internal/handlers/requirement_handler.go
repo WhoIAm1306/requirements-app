@@ -21,6 +21,11 @@ import (
 const telephonySectionName = "Телефония"
 const undefinedQueueName = "Не определена"
 
+func isUndefinedQueueValue(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	return strings.EqualFold(strings.TrimSpace(value), undefinedQueueName) || strings.Contains(normalized, "не определ")
+}
+
 func isTelephonySectionName(s string) bool {
 	return strings.EqualFold(strings.TrimSpace(s), telephonySectionName)
 }
@@ -224,7 +229,7 @@ type ImportResult struct {
 }
 
 func extractQueueNumber(value string) (int, error) {
-	if strings.EqualFold(strings.TrimSpace(value), undefinedQueueName) {
+	if isUndefinedQueueValue(value) {
 		return 0, nil
 	}
 	re := regexp.MustCompile(`\d+`)
@@ -302,6 +307,10 @@ func (h *RequirementHandler) generateTaskIdentifier(systemType, queueName, contr
 	if err != nil {
 		return "", err
 	}
+	// Бизнес-правило: для очереди "Не определена" префикс в ID считаем как для 1 очереди.
+	if isUndefinedQueueValue(queueName) {
+		queueNumber = 1
+	}
 	queueSegment := taskIDQueueSegment(sectionName, queueNumber)
 
 	contractName = strings.TrimSpace(contractName)
@@ -376,6 +385,7 @@ type requirementListRow struct {
 
 func (h *RequirementHandler) List(c *gin.Context) {
 	var items []models.Requirement
+	_ = h.db.Exec(`UPDATE requirements SET sequence_number = id WHERE COALESCE(sequence_number, 0) = 0`)
 
 	query := h.db.Model(&models.Requirement{})
 
@@ -528,6 +538,11 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Выберите очередь"})
 		return
 	}
+	normalizedQueue, err := h.ensureQueueExists(strings.TrimSpace(req.ImplementationQueue))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректная очередь"})
+		return
+	}
 
 	if strings.TrimSpace(req.ResponsiblePerson) == "" {
 		req.ResponsiblePerson = userName
@@ -554,13 +569,13 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		var err error
 		taskIdentifier, err = h.generateTaskIdentifier(
 			sys,
-			strings.TrimSpace(req.ImplementationQueue),
+			normalizedQueue,
 			contractName,
 			strings.TrimSpace(req.SectionName),
 			0,
 		)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"message": "Ошибка генерации идентификатора задачи"})
+			c.JSON(http.StatusBadRequest, gin.H{"message": fmt.Sprintf("Ошибка генерации идентификатора задачи: %v", err)})
 			return
 		}
 	}
@@ -574,7 +589,7 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		ProposalText:        strings.TrimSpace(req.ProposalText),
 		ProblemComment:      strings.TrimSpace(req.ProblemComment),
 		DiscussionSummary:   strings.TrimSpace(req.DiscussionSummary),
-		ImplementationQueue: strings.TrimSpace(req.ImplementationQueue),
+		ImplementationQueue: normalizedQueue,
 		NoteText:            strings.TrimSpace(req.NoteText),
 		TZPointText:         strings.TrimSpace(req.TZPointText),
 		NmckPointText:       strings.TrimSpace(req.NmckPointText),
@@ -666,6 +681,11 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Выберите очередь"})
 		return
 	}
+	newQueue, err := h.ensureQueueExists(strings.TrimSpace(req.ImplementationQueue))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректная очередь"})
+		return
+	}
 
 	sys := normalizeRequirementSystemType(req.SystemType)
 	if err := validateRequirementSystemType(sys); err != nil {
@@ -674,7 +694,6 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 	}
 
 	oldQueue := strings.TrimSpace(item.ImplementationQueue)
-	newQueue := strings.TrimSpace(req.ImplementationQueue)
 	queueChanged := oldQueue != newQueue
 	oldTID := strings.TrimSpace(item.TaskIdentifier)
 
@@ -699,7 +718,7 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 				item.ID,
 			)
 			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"message": "Ошибка генерации идентификатора задачи"})
+				c.JSON(http.StatusBadRequest, gin.H{"message": fmt.Sprintf("Ошибка генерации идентификатора задачи: %v", err)})
 				return
 			}
 			item.TaskIdentifier = taskIdentifier
@@ -943,6 +962,9 @@ func standardQueueName(queueNumber int) string {
 }
 
 func (h *RequirementHandler) ensureQueueExists(queueName string) (string, error) {
+	if isUndefinedQueueValue(queueName) {
+		queueName = undefinedQueueName
+	}
 	queueNumber, err := extractQueueNumber(queueName)
 	if err != nil {
 		return "", err
@@ -1186,6 +1208,7 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 
 func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 	var items []models.Requirement
+	_ = h.db.Exec(`UPDATE requirements SET sequence_number = id WHERE COALESCE(sequence_number, 0) = 0`)
 
 	query := h.db.Model(&models.Requirement{})
 

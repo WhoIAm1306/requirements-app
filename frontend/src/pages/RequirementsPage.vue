@@ -60,17 +60,6 @@
                       <span class="summary-value summary-value--inline">{{ countByStatus('Выполнено') }}</span>
                     </div>
                   </el-card>
-                  <el-card class="summary-card summary-card--mini status-card--other" shadow="hover">
-                    <div class="summary-main-inline">
-                      <span class="summary-label summary-label--inline">Другие</span>
-                      <span class="summary-value summary-value--inline">
-                        {{
-                          items.filter((item) => !isStandardRequirementStatus((item.statusText || '').trim()))
-                            .length
-                        }}
-                      </span>
-                    </div>
-                  </el-card>
                 </div>
 
                 <div class="summary-popover-row summary-popover-row--queues">
@@ -84,12 +73,6 @@
                     <div class="summary-main-inline">
                       <span class="summary-label summary-label--inline">{{ queue.name }}</span>
                       <span class="summary-value summary-value--inline">{{ countByQueue(queue.name) }}</span>
-                    </div>
-                  </el-card>
-                  <el-card class="summary-card summary-card--mini queue-card--default" shadow="hover">
-                    <div class="summary-main-inline">
-                      <span class="summary-label summary-label--inline">Другие очереди</span>
-                      <span class="summary-value summary-value--inline">{{ countOtherQueues() }}</span>
                     </div>
                   </el-card>
                 </div>
@@ -229,6 +212,25 @@
                 </el-button>
               </el-tooltip>
             </div>
+            <div v-if="canEdit && selectionMode" class="selection-actions-row">
+              <el-button
+                type="warning"
+                plain
+                :disabled="selectedRows.length === 0"
+                @click="handleArchiveSelected"
+              >
+                В архив ({{ selectedRows.length }})
+              </el-button>
+              <el-button
+                type="danger"
+                plain
+                :disabled="selectedRows.length === 0"
+                @click="handleDeleteSelected"
+              >
+                Удалить ({{ selectedRows.length }})
+              </el-button>
+              <el-button @click="exitSelectionMode">Готово</el-button>
+            </div>
           </div>
 
           <div class="toolbar-right">
@@ -242,6 +244,9 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item command="toggle-selection">
+                    {{ selectionMode ? 'Завершить выделение' : 'Выделить' }}
+                  </el-dropdown-item>
                   <el-dropdown-item command="import">Импорт предложений</el-dropdown-item>
                   <el-dropdown-item command="template">Шаблон предложений (Excel)</el-dropdown-item>
                 </el-dropdown-menu>
@@ -260,56 +265,15 @@
             class="table-horizontal-wrap"
             element-loading-background="rgba(255, 255, 255, 0.72)"
           >
-            <div class="table-width-box" :style="{ width: `${tableWidth}px` }">
-              <div class="requirements-header-sticky">
-                <table class="requirements-header-table" aria-hidden="true">
-                  <colgroup>
-                    <col style="width: 56px" />
-                    <col style="width: 150px" />
-                    <col style="width: 330px" />
-                    <col style="width: 180px" />
-                    <col style="width: 200px" />
-                    <col style="width: 130px" />
-                    <col style="width: 120px" />
-                    <col style="width: 190px" />
-                    <col style="width: 280px" />
-                    <col style="width: 150px" />
-                    <col style="width: 130px" />
-                    <col style="width: 200px" />
-                    <col style="width: 520px" />
-                    <col style="width: 400px" />
-                    <col style="width: 128px" />
-                    <col style="width: 128px" />
-                    <col style="width: 64px" />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th>№</th>
-                      <th>ID</th>
-                      <th>Наименование</th>
-                      <th>Инициатор</th>
-                      <th>Ответственный</th>
-                      <th>Раздел</th>
-                      <th>Приоритет</th>
-                      <th>ГК</th>
-                      <th>Функция НМЦК, ТЗ</th>
-                      <th>Статус</th>
-                      <th>Система</th>
-                      <th>Письмо в ДИТ</th>
-                      <th>Предложение</th>
-                      <th>Комментарии и описание проблем</th>
-                      <th>Дата создания</th>
-                      <th>Дата выполнения</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                </table>
-              </div>
-
+            <div class="table-width-box">
               <el-table
+                ref="tableRef"
                 class="requirements-table"
+                :class="{ 'drag-selecting': dragSelectionActive }"
                 :data="pagedItems"
                 @row-click="handleRowClick"
+                @selection-change="handleSelectionChange"
+                @cell-mouse-enter="handleCellMouseEnter"
                 row-key="id"
                 stripe
                 border
@@ -317,9 +281,9 @@
                 :row-class-name="getRowClassName"
                 table-layout="fixed"
                 :fit="false"
-                :show-header="false"
-                :style="{ width: `${tableWidth}px` }"
+                :show-header="true"
               >
+                <el-table-column v-if="selectionMode" type="selection" width="48" />
                 <el-table-column
                   prop="sequenceNumber"
                   label="№"
@@ -436,7 +400,12 @@
                   </template>
                 </el-table-column>
 
-                <el-table-column label="" width="64" align="center" class-name="row-menu-col">
+                <el-table-column
+                  label=""
+                  width="64"
+                  align="center"
+                  class-name="row-menu-col"
+                >
                   <template #default="{ row }">
                     <el-dropdown trigger="click" @command="(cmd: string) => handleRowMenuCommand(cmd, row)">
                       <el-button size="small" circle class="row-menu-trigger" @click.stop>
@@ -508,7 +477,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Close, MoreFilled } from '@element-plus/icons-vue'
@@ -531,10 +500,7 @@ import ProfileDrawer from '@/components/ProfileDrawer.vue'
 import RequirementTzInfoDialog from '@/components/RequirementTzInfoDialog.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import QueueTag from '@/components/QueueTag.vue'
-import {
-  STANDARD_REQUIREMENT_STATUSES,
-  isStandardRequirementStatus,
-} from '@/constants/requirementStatuses'
+import { STANDARD_REQUIREMENT_STATUSES } from '@/constants/requirementStatuses'
 import { systemTypeLabel } from '@/constants/systemTypes'
 import type { QueueItem, Requirement } from '@/types'
 
@@ -564,8 +530,14 @@ const detailsVisible = ref(false)
 const profileDrawerVisible = ref(false)
 const importRequirementsVisible = ref(false)
 const selectedRequirementId = ref<number | null>(null)
+const selectedRows = ref<Requirement[]>([])
 const tzInfoVisible = ref(false)
 const tzInfoRequirementId = ref<number | null>(null)
+const tableRef = ref<any>(null)
+const selectionMode = ref(false)
+const dragSelectionActive = ref(false)
+const dragSelectionChecked = ref(false)
+const dragVisitedRowIds = new Set<number>()
 
 const archiveFilterMode = ref<'active' | 'all' | 'archived_only'>('active')
 const DEFAULT_QUEUE_NAME = 'Не определена'
@@ -577,8 +549,6 @@ const items = shallowRef<Requirement[]>([])
 const queues = ref<QueueItem[]>([])
 
 /** Сумма ширин колонок (table-layout: fixed). */
-const tableWidth = 3356
-
 /** Клиентская пагинация: меньше узлов в DOM → отзывчивее интерфейс. */
 const tablePage = ref(1)
 const tablePageSize = ref(50)
@@ -735,15 +705,6 @@ function countByQueue(queueName: string) {
   return items.value.filter((item) => (item.implementationQueue || '').trim() === queueName).length
 }
 
-function countOtherQueues() {
-  const knownQueues = new Set(queues.value.map((queue) => (queue.name || '').trim()).filter(Boolean))
-  return items.value.filter((item) => {
-    const queueName = (item.implementationQueue || '').trim()
-    if (!queueName) return false
-    return !knownQueues.has(queueName)
-  }).length
-}
-
 function queueSummaryCardClass(queueName: string) {
   const value = (queueName || '').trim().toLowerCase()
   if (value.includes('1')) return 'queue-card--1'
@@ -802,6 +763,8 @@ async function loadData() {
     })
     if (seq !== loadListSeq) return
     items.value = data
+    selectedRows.value = []
+    tableRef.value?.clearSelection?.()
     tablePage.value = 1
     await nextTick()
   } catch (error: any) {
@@ -855,6 +818,77 @@ async function handleArchive(row: Requirement) {
   }
 }
 
+function handleSelectionChange(rows: Requirement[]) {
+  selectedRows.value = rows
+}
+
+function isSelectionColumn(column: any) {
+  return column?.type === 'selection' || column?.columnKey === 'selection'
+}
+
+function isRowSelected(id: number) {
+  return selectedRows.value.some((row) => row.id === id)
+}
+
+function applyDragSelection(row: Requirement) {
+  if (dragVisitedRowIds.has(row.id)) return
+  dragVisitedRowIds.add(row.id)
+  tableRef.value?.toggleRowSelection?.(row, dragSelectionChecked.value)
+}
+
+function exitSelectionMode() {
+  selectionMode.value = false
+  selectedRows.value = []
+  dragSelectionActive.value = false
+  dragVisitedRowIds.clear()
+  tableRef.value?.clearSelection?.()
+}
+
+function handleCellMouseEnter(row: Requirement, column: any, _cell: HTMLElement, event: MouseEvent) {
+  if (!selectionMode.value) return
+  if (event.buttons !== 1) return
+  if (!isSelectionColumn(column)) return
+  if (!dragSelectionActive.value) {
+    dragSelectionActive.value = true
+    dragVisitedRowIds.clear()
+    dragSelectionChecked.value = !isRowSelected(row.id)
+  }
+  applyDragSelection(row)
+}
+
+function handleDragSelectionStop() {
+  dragSelectionActive.value = false
+  dragVisitedRowIds.clear()
+}
+
+async function handleArchiveSelected() {
+  const rows = selectedRows.value.filter((row) => !row.isArchived)
+  if (!rows.length) {
+    ElMessage.info('Для архивации выберите хотя бы одну активную запись')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `Перенести в архив выбранные записи: ${rows.length} шт.?`,
+      'Массовая архивация',
+      {
+        type: 'warning',
+        confirmButtonText: 'В архив',
+        cancelButtonText: 'Отмена',
+      },
+    )
+  } catch {
+    return
+  }
+  try {
+    await Promise.all(rows.map((row) => archiveRequirement(row.id)))
+    ElMessage.success(`В архив отправлено: ${rows.length}`)
+    await loadData()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка массовой архивации')
+  }
+}
+
 /**
  * Восстановление записи.
  */
@@ -887,6 +921,16 @@ function handleUserMenuCommand(cmd: string) {
 }
 
 function handleImportMenuCommand(cmd: string) {
+  if (cmd === 'toggle-selection') {
+    if (selectionMode.value) {
+      exitSelectionMode()
+    } else {
+      selectionMode.value = true
+      selectedRows.value = []
+      tableRef.value?.clearSelection?.()
+    }
+    return
+  }
   if (cmd === 'import') {
     importRequirementsVisible.value = true
     return
@@ -936,6 +980,39 @@ async function handleDelete(row: Requirement) {
   }
 }
 
+async function handleDeleteSelected() {
+  const rows = selectedRows.value
+  if (!rows.length) {
+    ElMessage.info('Выберите записи для удаления')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `Удалить выбранные записи: ${rows.length} шт.? Это действие нельзя отменить.`,
+      'Массовое удаление',
+      {
+        type: 'error',
+        confirmButtonText: 'Удалить',
+        cancelButtonText: 'Отмена',
+        confirmButtonClass: 'el-button--danger',
+      },
+    )
+  } catch {
+    return
+  }
+  try {
+    await Promise.all(rows.map((row) => deleteRequirement(row.id)))
+    ElMessage.success(`Удалено записей: ${rows.length}`)
+    if (selectedRequirementId.value && rows.some((row) => row.id === selectedRequirementId.value)) {
+      detailsVisible.value = false
+      selectedRequirementId.value = null
+    }
+    await loadData()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка массового удаления')
+  }
+}
+
 async function handleDeleteAllRequirements() {
   try {
     await ElMessageBox.confirm(
@@ -968,7 +1045,9 @@ async function handleDeleteAllRequirements() {
 /**
  * Открытие карточки записи.
  */
-function handleRowClick(row: Requirement) {
+function handleRowClick(row: Requirement, column?: any) {
+  if (selectionMode.value) return
+  if (isSelectionColumn(column)) return
   selectedRequirementId.value = row.id
   detailsVisible.value = true
 }
@@ -1028,7 +1107,12 @@ function onRequirementDeletedFromDrawer() {
 }
 
 onMounted(async () => {
+  window.addEventListener('mouseup', handleDragSelectionStop)
   await Promise.all([loadQueues(), loadData()])
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('mouseup', handleDragSelectionStop)
 })
 </script>
 
@@ -1510,6 +1594,10 @@ onMounted(async () => {
   background: rgba(100, 116, 139, 0.55);
 }
 
+.table-width-box {
+  width: max-content;
+}
+
 .table-pagination {
   flex-shrink: 0;
   padding-top: 12px;
@@ -1520,7 +1608,12 @@ onMounted(async () => {
 }
 
 .requirements-table {
-  width: 3300px;
+  width: 3356px;
+}
+
+.requirements-table.drag-selecting :deep(td.el-table__cell),
+.requirements-table.drag-selecting :deep(th.el-table__cell) {
+  user-select: none;
 }
 
 .requirements-header-sticky {
@@ -1530,7 +1623,7 @@ onMounted(async () => {
 }
 
 .requirements-header-table {
-  width: 3300px;
+  width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
   background: #f8fbff;
@@ -1577,6 +1670,10 @@ onMounted(async () => {
   padding: 8px 8px;
   font-size: 13px;
   vertical-align: top;
+}
+
+.requirements-table :deep(.cell) {
+  text-overflow: clip;
 }
 
 .requirements-table :deep(.el-table__inner-wrapper) {
@@ -1629,6 +1726,13 @@ onMounted(async () => {
   gap: 8px;
   flex-wrap: nowrap;
   min-width: 0;
+}
+
+.selection-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .search-input {
