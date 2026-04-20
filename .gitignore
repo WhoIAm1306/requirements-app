@@ -19,3 +19,9 @@ Thumbs.db
 .vscode
 .idea
 .md
+
+# local confluence drafts
+confluence-drafts/system-description-detailed.md
+confluence-drafts/system-description-confluence.wiki
+confluence-drafts/requirements-accounting-regulation-detailed.md
+confluence-drafts/requirements-accounting-regulation-confluence.wiki
