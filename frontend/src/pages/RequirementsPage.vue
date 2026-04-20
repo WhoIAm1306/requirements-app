@@ -263,11 +263,69 @@
       <el-card class="table-card" shadow="never">
         <div class="table-stack">
           <div
+            class="table-header-scroll"
+            ref="tableHeaderScrollRef"
+            :style="{ paddingRight: `${tableBodyScrollbarWidth}px` }"
+            aria-hidden="true"
+          >
+            <div class="table-width-box" :style="{ width: `${tableWidth}px` }">
+              <div class="requirements-header-sticky">
+                <table class="requirements-header-table" aria-hidden="true">
+                  <colgroup>
+                    <col v-if="selectionMode" style="width: 48px" />
+                    <col style="width: 56px" />
+                    <col style="width: 150px" />
+                    <col style="width: 330px" />
+                    <col style="width: 180px" />
+                    <col style="width: 200px" />
+                    <col style="width: 130px" />
+                    <col style="width: 120px" />
+                    <col style="width: 190px" />
+                    <col style="width: 280px" />
+                    <col style="width: 150px" />
+                    <col style="width: 130px" />
+                    <col style="width: 200px" />
+                    <col style="width: 520px" />
+                    <col style="width: 400px" />
+                    <col style="width: 128px" />
+                    <col style="width: 128px" />
+                    <col style="width: 64px" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th v-if="selectionMode"></th>
+                      <th>№</th>
+                      <th>ID</th>
+                      <th>Наименование</th>
+                      <th>Инициатор</th>
+                      <th>Ответственный</th>
+                      <th>Раздел</th>
+                      <th>Приоритет</th>
+                      <th>ГК</th>
+                      <th>Функция НМЦК, ТЗ</th>
+                      <th>Статус</th>
+                      <th>Система</th>
+                      <th>Письмо в ДИТ</th>
+                      <th>Предложение</th>
+                      <th>Комментарии и описание проблем</th>
+                      <th>Дата создания</th>
+                      <th>Дата выполнения</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div
             v-loading="loading"
             class="table-horizontal-wrap"
+            ref="tableBodyScrollRef"
+            @scroll.passive="syncHeaderScroll"
             element-loading-background="rgba(255, 255, 255, 0.72)"
           >
-            <div class="table-width-box">
+            <div class="table-width-box" :style="{ width: `${tableWidth}px` }">
               <el-table
                 ref="tableRef"
                 class="requirements-table"
@@ -283,7 +341,8 @@
                 :row-class-name="getRowClassName"
                 table-layout="fixed"
                 :fit="false"
-                :show-header="true"
+                :show-header="false"
+                :style="{ width: `${tableWidth}px` }"
               >
                 <el-table-column v-if="selectionMode" type="selection" width="48" />
                 <el-table-column
@@ -554,6 +613,8 @@ const items = shallowRef<Requirement[]>([])
 const queues = ref<QueueItem[]>([])
 
 /** Сумма ширин колонок (table-layout: fixed). */
+const tableWidthBase = 3356
+const tableWidth = computed(() => tableWidthBase + (selectionMode.value ? 48 : 0))
 /** Клиентская пагинация: меньше узлов в DOM → отзывчивее интерфейс. */
 const tablePage = ref(1)
 const tablePageSize = ref(50)
@@ -563,6 +624,21 @@ const pagedItems = computed(() => {
   const start = (tablePage.value - 1) * tablePageSize.value
   return list.slice(start, start + tablePageSize.value)
 })
+
+const tableHeaderScrollRef = ref<HTMLElement | null>(null)
+const tableBodyScrollRef = ref<HTMLElement | null>(null)
+const tableBodyScrollbarWidth = ref(0)
+
+function syncHeaderScrollbarCompensation() {
+  if (!tableBodyScrollRef.value) return
+  tableBodyScrollbarWidth.value =
+    tableBodyScrollRef.value.offsetWidth - tableBodyScrollRef.value.clientWidth
+}
+
+function syncHeaderScroll() {
+  if (!tableHeaderScrollRef.value || !tableBodyScrollRef.value) return
+  tableHeaderScrollRef.value.scrollLeft = tableBodyScrollRef.value.scrollLeft
+}
 
 /**
  * Фильтры списка.
@@ -772,6 +848,8 @@ async function loadData() {
     tableRef.value?.clearSelection?.()
     tablePage.value = 1
     await nextTick()
+    syncHeaderScrollbarCompensation()
+    syncHeaderScroll()
   } catch (error: any) {
     if (seq !== loadListSeq) return
     ElMessage.error(error?.response?.data?.message || 'Ошибка загрузки')
@@ -1124,11 +1202,16 @@ function onRequirementDeletedFromDrawer() {
 }
 
 onMounted(async () => {
+  window.addEventListener('resize', syncHeaderScrollbarCompensation)
   window.addEventListener('mouseup', handleDragSelectionStop)
   await Promise.all([loadQueues(), loadData()])
+  await nextTick()
+  syncHeaderScrollbarCompensation()
+  syncHeaderScroll()
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', syncHeaderScrollbarCompensation)
   window.removeEventListener('mouseup', handleDragSelectionStop)
 })
 </script>
@@ -1586,6 +1669,18 @@ onBeforeUnmount(() => {
   gap: 0;
 }
 
+.table-header-scroll {
+  flex: 0 0 auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--el-table-border-color);
+}
+
+.table-header-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 .table-horizontal-wrap {
   flex: 1 1 auto;
   min-width: 0;
@@ -1625,7 +1720,7 @@ onBeforeUnmount(() => {
 }
 
 .requirements-table {
-  width: 3356px;
+  width: 100%;
 }
 
 .requirements-table.drag-selecting :deep(td.el-table__cell),
@@ -1634,9 +1729,8 @@ onBeforeUnmount(() => {
 }
 
 .requirements-header-sticky {
-  position: sticky;
-  top: 0;
-  z-index: 12;
+  position: relative;
+  z-index: 2;
 }
 
 .requirements-header-table {
