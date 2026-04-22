@@ -5,6 +5,7 @@ const LoginPage = () => import('@/pages/LoginPage.vue')
 const RequirementsPage = () => import('@/pages/RequirementsPage.vue')
 const AdminUsersPage = () => import('@/pages/AdminUsersPage.vue')
 const GKDirectoryPage = () => import('@/pages/GKDirectoryPage.vue')
+const FunctionsDirectoryPage = () => import('@/pages/FunctionsDirectoryPage.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -18,6 +19,7 @@ const router = createRouter({
       meta: { requiresAdmin: true },
     },
     { path: '/gk-directory', component: GKDirectoryPage },
+    { path: '/functions-directory', component: FunctionsDirectoryPage },
   ],
 })
 

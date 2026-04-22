@@ -72,6 +72,14 @@ func NewPostgres(cfg *config.Config) (*gorm.DB, error) {
 	`); res.Error != nil {
 		return nil, res.Error
 	}
+	// Миграция данных статусов: старый статус «В обработку» -> «Новое».
+	if res := database.Exec(`
+		UPDATE requirements
+		SET status_text = 'Новое'
+		WHERE LOWER(TRIM(COALESCE(status_text, ''))) = 'в обработку'
+	`); res.Error != nil {
+		return nil, res.Error
+	}
 	_ = database.Exec(`UPDATE users SET requirement_field_grants = '{}'::jsonb WHERE requirement_field_grants IS NULL`)
 	_ = database.Exec(`UPDATE users SET gk_directory_grants = '{}'::jsonb WHERE gk_directory_grants IS NULL`)
 	// Миграция порядкового номера: для старых записей, где номер ещё не выставлен.

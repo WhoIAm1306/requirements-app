@@ -45,12 +45,22 @@ type ContractStageRequest struct {
 	StageName   string `json:"stageName"`
 }
 
+type UpdateContractStageRequest struct {
+	StageName string `json:"stageName"`
+}
+
 type ContractTZFunctionRequest struct {
-	StageNumber        int    `json:"stageNumber"`
-	FunctionName       string `json:"functionName"`
-	NMCKFunctionNumber string `json:"nmckFunctionNumber"`
-	TZSectionNumber    string `json:"tzSectionNumber"`
-	JiraLink           string `json:"jiraLink"`
+	StageNumber        int      `json:"stageNumber"`
+	FunctionName       string   `json:"functionName"`
+	NMCKFunctionNumber string   `json:"nmckFunctionNumber"`
+	TZSectionNumber    string   `json:"tzSectionNumber"`
+	JiraLink           string   `json:"jiraLink"`
+	ConfluenceLinks    []string `json:"confluenceLinks"`
+	JiraEpicLinks      []string `json:"jiraEpicLinks"`
+}
+
+type FunctionRequirementsRequest struct {
+	RequirementIDs []uint `json:"requirementIds"`
 }
 
 type GKImportResult struct {
@@ -97,6 +107,24 @@ func extractIntFromAny(value string) (int, error) {
 		return 0, fmt.Errorf("не удалось извлечь число")
 	}
 	return strconv.Atoi(s)
+}
+
+func normalizeLinks(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, raw := range values {
+		v := strings.TrimSpace(raw)
+		if v == "" {
+			continue
+		}
+		key := strings.ToLower(v)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, v)
+	}
+	return out
 }
 
 func standardStageName(stageNumber int) string {
@@ -322,6 +350,47 @@ func (h *ContractDirectoryHandler) CreateStage(c *gin.Context) {
 	c.JSON(http.StatusOK, stage)
 }
 
+// PUT /api/contracts/:id/stages/:stageNumber
+func (h *ContractDirectoryHandler) UpdateStage(c *gin.Context) {
+	var req UpdateContractStageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный запрос"})
+		return
+	}
+
+	contractIDStr := strings.TrimSpace(c.Param("id"))
+	contractID64, err := strconv.ParseUint(contractIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный contractId"})
+		return
+	}
+	stageNumber, err := extractIntFromAny(c.Param("stageNumber"))
+	if err != nil || stageNumber <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный номер этапа"})
+		return
+	}
+
+	var stage models.ContractStage
+	if err := h.db.
+		Where("contract_id = ? AND stage_number = ?", uint(contractID64), stageNumber).
+		First(&stage).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Этап не найден"})
+		return
+	}
+
+	name := strings.TrimSpace(req.StageName)
+	if name == "" {
+		name = standardStageName(stage.StageNumber)
+	}
+	stage.StageName = name
+	if err := h.db.Save(&stage).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка обновления этапа"})
+		return
+	}
+
+	c.JSON(http.StatusOK, stage)
+}
+
 // POST /api/contracts/:id/functions
 func (h *ContractDirectoryHandler) UpsertTZFunction(c *gin.Context) {
 	var req ContractTZFunctionRequest
@@ -341,6 +410,8 @@ func (h *ContractDirectoryHandler) UpsertTZFunction(c *gin.Context) {
 		return
 	}
 	req.NMCKFunctionNumber = strings.TrimSpace(req.NMCKFunctionNumber)
+	req.ConfluenceLinks = normalizeLinks(req.ConfluenceLinks)
+	req.JiraEpicLinks = normalizeLinks(req.JiraEpicLinks)
 	if req.NMCKFunctionNumber == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Номер функции по НМЦК обязателен"})
 		return
@@ -369,6 +440,8 @@ func (h *ContractDirectoryHandler) UpsertTZFunction(c *gin.Context) {
 	if err == nil {
 		existing.FunctionName = req.FunctionName
 		existing.JiraLink = strings.TrimSpace(req.JiraLink)
+		existing.ConfluenceLinks = req.ConfluenceLinks
+		existing.JiraEpicLinks = req.JiraEpicLinks
 		if err := h.db.Save(&existing).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка обновления функции"})
 			return
@@ -382,12 +455,14 @@ func (h *ContractDirectoryHandler) UpsertTZFunction(c *gin.Context) {
 	}
 
 	item := models.ContractTZFunction{
-		ContractID:          contract.ID,
-		ContractStageID:     stage.ID,
-		FunctionName:        req.FunctionName,
-		NMCKFunctionNumber:  req.NMCKFunctionNumber,
-		TZSectionNumber:     req.TZSectionNumber,
-		JiraLink:            strings.TrimSpace(req.JiraLink),
+		ContractID:         contract.ID,
+		ContractStageID:    stage.ID,
+		FunctionName:       req.FunctionName,
+		NMCKFunctionNumber: req.NMCKFunctionNumber,
+		TZSectionNumber:    req.TZSectionNumber,
+		JiraLink:           strings.TrimSpace(req.JiraLink),
+		ConfluenceLinks:    req.ConfluenceLinks,
+		JiraEpicLinks:      req.JiraEpicLinks,
 	}
 
 	if err := h.db.Create(&item).Error; err != nil {
@@ -670,6 +745,145 @@ func (h *ContractDirectoryHandler) ListFunctionsForStage(c *gin.Context) {
 	c.JSON(http.StatusOK, functions)
 }
 
+func (h *ContractDirectoryHandler) functionByContractAndID(contractID uint, functionID uint) (*models.ContractTZFunction, error) {
+	var fn models.ContractTZFunction
+	if err := h.db.First(&fn, functionID).Error; err != nil {
+		return nil, err
+	}
+	if fn.ContractID != contractID {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &fn, nil
+}
+
+// GET /api/contracts/:id/functions/:functionId/requirements
+func (h *ContractDirectoryHandler) ListFunctionRequirements(c *gin.Context) {
+	contractID64, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный contractId"})
+		return
+	}
+	functionID64, err := strconv.ParseUint(strings.TrimSpace(c.Param("functionId")), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный functionId"})
+		return
+	}
+	if _, err := h.functionByContractAndID(uint(contractID64), uint(functionID64)); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Функция ТЗ не найдена"})
+		return
+	}
+
+	var items []models.Requirement
+	if err := h.db.
+		Where("contract_tz_function_id = ?", uint(functionID64)).
+		Order("updated_at desc").
+		Find(&items).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения связанных предложений"})
+		return
+	}
+	c.JSON(http.StatusOK, items)
+}
+
+// POST /api/contracts/:id/functions/:functionId/requirements/bind
+func (h *ContractDirectoryHandler) BindRequirementsToFunction(c *gin.Context) {
+	contractID64, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный contractId"})
+		return
+	}
+	functionID64, err := strconv.ParseUint(strings.TrimSpace(c.Param("functionId")), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный functionId"})
+		return
+	}
+	var req FunctionRequirementsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный запрос"})
+		return
+	}
+	if len(req.RequirementIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Список предложений пуст"})
+		return
+	}
+
+	fn, err := h.functionByContractAndID(uint(contractID64), uint(functionID64))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Функция ТЗ не найдена"})
+		return
+	}
+	var contract models.ContractDictionary
+	if err := h.db.First(&contract, fn.ContractID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "ГК не найдена"})
+		return
+	}
+
+	userName := c.GetString("userName")
+	userOrg := c.GetString("userOrg")
+	res := h.db.Model(&models.Requirement{}).
+		Where("id IN ?", req.RequirementIDs).
+		Updates(map[string]interface{}{
+			"contract_name":           contract.Name,
+			"contract_tz_function_id": fn.ID,
+			"tz_point_text":           strings.TrimSpace(fn.TZSectionNumber),
+			"nmck_point_text":         strings.TrimSpace(fn.NMCKFunctionNumber),
+			"last_edited_by":          userName,
+			"last_edited_org":         userOrg,
+		})
+	if res.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка привязки предложений"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"updated": res.RowsAffected})
+}
+
+// POST /api/contracts/:id/functions/:functionId/requirements/unbind
+func (h *ContractDirectoryHandler) UnbindRequirementsFromFunction(c *gin.Context) {
+	contractID64, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный contractId"})
+		return
+	}
+	functionID64, err := strconv.ParseUint(strings.TrimSpace(c.Param("functionId")), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный functionId"})
+		return
+	}
+	var req FunctionRequirementsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный запрос"})
+		return
+	}
+	if len(req.RequirementIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Список предложений пуст"})
+		return
+	}
+
+	fn, err := h.functionByContractAndID(uint(contractID64), uint(functionID64))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Функция ТЗ не найдена"})
+		return
+	}
+
+	userName := c.GetString("userName")
+	userOrg := c.GetString("userOrg")
+	res := h.db.Model(&models.Requirement{}).
+		Where("id IN ?", req.RequirementIDs).
+		Where("contract_tz_function_id = ?", fn.ID).
+		Updates(map[string]interface{}{
+			"contract_name":           "",
+			"contract_tz_function_id": nil,
+			"tz_point_text":           "",
+			"nmck_point_text":         "",
+			"last_edited_by":          userName,
+			"last_edited_org":         userOrg,
+		})
+	if res.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка отвязки предложений"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"updated": res.RowsAffected})
+}
+
 type ContractAttachmentItem struct {
 	ID               uint      `json:"id"`
 	ContractID       uint      `json:"contractId"`
@@ -693,11 +907,11 @@ func (h *ContractDirectoryHandler) ListContractAttachments(c *gin.Context) {
 	out := make([]ContractAttachmentItem, 0, len(attachments))
 	for _, a := range attachments {
 		out = append(out, ContractAttachmentItem{
-			ID:                a.ID,
-			ContractID:        a.ContractID,
-			Type:              a.Type,
+			ID:               a.ID,
+			ContractID:       a.ContractID,
+			Type:             a.Type,
 			OriginalFileName: a.OriginalFileName,
-			CreatedAt:         a.CreatedAt,
+			CreatedAt:        a.CreatedAt,
 		})
 	}
 	c.JSON(http.StatusOK, out)
@@ -796,12 +1010,12 @@ func (h *ContractDirectoryHandler) UploadContractAttachments(c *gin.Context) {
 		}
 
 		attachment := models.ContractAttachment{
-			ContractID:         uint(contractID64),
-			Type:               attachmentType,
-			OriginalFileName:  original,
-			StoredFileName:    storedName,
-			ContentType:       contentType,
-			FilePath:          storedPath,
+			ContractID:       uint(contractID64),
+			Type:             attachmentType,
+			OriginalFileName: original,
+			StoredFileName:   storedName,
+			ContentType:      contentType,
+			FilePath:         storedPath,
 		}
 		if err := h.db.Create(&attachment).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка сохранения записи вложения"})
@@ -1024,4 +1238,3 @@ func (h *ContractDirectoryHandler) DeleteContractAttachment(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Вложение удалено"})
 }
-

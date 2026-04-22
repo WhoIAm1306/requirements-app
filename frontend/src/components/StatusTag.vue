@@ -14,11 +14,11 @@ const props = defineProps<{
 const tagType = computed(() => {
   const value = (props.status || '').trim().toLowerCase()
 
-  if (value === 'в обработку') return 'warning'
   if (value === 'новое') return 'info'
-  if (value === 'требуется обсуждение') return 'danger'
+  if (value === 'подтверждено') return 'primary'
+  if (value === 'требуется обсуждение') return 'warning'
   if (value === 'учтено') return 'success'
-  if (value === 'выполнено') return 'primary'
+  if (value === 'выполнено') return 'success'
 
   return 'info'
 })

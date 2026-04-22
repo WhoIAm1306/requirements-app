@@ -20,6 +20,8 @@ export type RequirementListQuery = {
   sortOrder?: 'asc' | 'desc'
 }
 
+export type ArchiveRequirementReason = 'completed' | 'outdated'
+
 /**
  * Получение списка предложений.
  */
@@ -81,8 +83,8 @@ export async function deleteRequirementComment(id: number, commentId: number) {
 /**
  * Архивирование предложения.
  */
-export async function archiveRequirement(id: number) {
-  const { data } = await apiClient.post(`/requirements/${id}/archive`)
+export async function archiveRequirement(id: number, reason: ArchiveRequirementReason) {
+  const { data } = await apiClient.post(`/requirements/${id}/archive`, { reason })
   return data
 }
 
@@ -91,6 +93,11 @@ export async function archiveRequirement(id: number) {
  */
 export async function restoreRequirement(id: number) {
   const { data } = await apiClient.post(`/requirements/${id}/restore`)
+  return data
+}
+
+export async function unlinkRequirementGK(id: number) {
+  const { data } = await apiClient.post(`/requirements/${id}/unlink-gk`)
   return data
 }
 
@@ -116,6 +123,8 @@ export interface RequirementGKLinkInfo {
   tzSectionNumber: string
   nmckFunctionNumber: string
   jiraLink: string
+  confluenceLinks?: string[]
+  jiraEpicLinks?: string[]
   tzPointText: string
   nmckPointText: string
 }

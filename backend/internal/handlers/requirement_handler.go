@@ -20,6 +20,9 @@ import (
 
 const telephonySectionName = "Телефония"
 const undefinedQueueName = "Не определена"
+const defaultRequirementStatus = "Новое"
+const archiveReasonCompleted = "completed"
+const archiveReasonOutdated = "outdated"
 
 func isUndefinedQueueValue(value string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(value))
@@ -156,7 +159,7 @@ func applyRequirementListSQLSelect(db *gorm.DB) *gorm.DB {
 		"tz_point_text", "nmck_point_text", "status_text", "system_type",
 		"created_at", "updated_at", "completed_at", "dit_outgoing_number", "dit_outgoing_date",
 		"author_name", "author_org", "last_edited_by", "last_edited_org",
-		"is_archived", "archived_at", "archived_by", "archived_by_org",
+		"is_archived", "archived_at", "archived_reason", "archived_by", "archived_by_org",
 		"deleted_at",
 		"LEFT(COALESCE(proposal_text, ''), 520) AS proposal_text",
 		"LEFT(COALESCE(problem_comment, ''), 520) AS problem_comment",
@@ -172,44 +175,44 @@ func (h *RequirementHandler) nextSequenceNumber(tx *gorm.DB) (uint, error) {
 }
 
 type CreateRequirementRequest struct {
-	ShortName           string `json:"shortName"`
-	Initiator           string `json:"initiator"`
-	ResponsiblePerson   string `json:"responsiblePerson"`
-	SectionName         string `json:"sectionName"`
-	ProposalText        string `json:"proposalText"`
-	ProblemComment      string `json:"problemComment"`
-	DiscussionSummary   string `json:"discussionSummary"`
-	ImplementationQueue string `json:"implementationQueue"`
-	NoteText            string `json:"noteText"`
-	TZPointText         string `json:"tzPointText"`
-	NmckPointText       string `json:"nmckPointText"`
-	StatusText          string `json:"statusText"`
-	SystemType          string `json:"systemType"`
-	ContractName        string `json:"contractName"`
-	ContractTZFunctionID *uint  `json:"contractTZFunctionId"`
-	CompletedAt         *time.Time `json:"completedAt"`
-	DitOutgoingNumber   string     `json:"ditOutgoingNumber"`
-	DitOutgoingDate     *time.Time `json:"ditOutgoingDate"`
+	ShortName            string     `json:"shortName"`
+	Initiator            string     `json:"initiator"`
+	ResponsiblePerson    string     `json:"responsiblePerson"`
+	SectionName          string     `json:"sectionName"`
+	ProposalText         string     `json:"proposalText"`
+	ProblemComment       string     `json:"problemComment"`
+	DiscussionSummary    string     `json:"discussionSummary"`
+	ImplementationQueue  string     `json:"implementationQueue"`
+	NoteText             string     `json:"noteText"`
+	TZPointText          string     `json:"tzPointText"`
+	NmckPointText        string     `json:"nmckPointText"`
+	StatusText           string     `json:"statusText"`
+	SystemType           string     `json:"systemType"`
+	ContractName         string     `json:"contractName"`
+	ContractTZFunctionID *uint      `json:"contractTZFunctionId"`
+	CompletedAt          *time.Time `json:"completedAt"`
+	DitOutgoingNumber    string     `json:"ditOutgoingNumber"`
+	DitOutgoingDate      *time.Time `json:"ditOutgoingDate"`
 	// TaskIdentifier — необязательно; если пусто, сгенерируется автоматически.
 	TaskIdentifier string `json:"taskIdentifier,omitempty"`
 }
 
 type UpdateRequirementRequest struct {
-	ShortName           string `json:"shortName"`
-	Initiator           string `json:"initiator"`
-	ResponsiblePerson   string `json:"responsiblePerson"`
-	SectionName         string `json:"sectionName"`
-	ProposalText        string `json:"proposalText"`
-	ProblemComment      string `json:"problemComment"`
-	DiscussionSummary   string `json:"discussionSummary"`
-	ImplementationQueue string `json:"implementationQueue"`
-	NoteText            string `json:"noteText"`
-	TZPointText         string `json:"tzPointText"`
-	NmckPointText       string `json:"nmckPointText"`
-	StatusText          string `json:"statusText"`
-	SystemType          string `json:"systemType"`
-	ContractName        string `json:"contractName"`
-	ContractTZFunctionID *uint  `json:"contractTZFunctionId"`
+	ShortName            string     `json:"shortName"`
+	Initiator            string     `json:"initiator"`
+	ResponsiblePerson    string     `json:"responsiblePerson"`
+	SectionName          string     `json:"sectionName"`
+	ProposalText         string     `json:"proposalText"`
+	ProblemComment       string     `json:"problemComment"`
+	DiscussionSummary    string     `json:"discussionSummary"`
+	ImplementationQueue  string     `json:"implementationQueue"`
+	NoteText             string     `json:"noteText"`
+	TZPointText          string     `json:"tzPointText"`
+	NmckPointText        string     `json:"nmckPointText"`
+	StatusText           string     `json:"statusText"`
+	SystemType           string     `json:"systemType"`
+	ContractName         string     `json:"contractName"`
+	ContractTZFunctionID *uint      `json:"contractTZFunctionId"`
 	CompletedAt          *time.Time `json:"completedAt"`
 	DitOutgoingNumber    string     `json:"ditOutgoingNumber"`
 	DitOutgoingDate      *time.Time `json:"ditOutgoingDate"`
@@ -219,6 +222,10 @@ type UpdateRequirementRequest struct {
 
 type AddCommentRequest struct {
 	CommentText string `json:"commentText"`
+}
+
+type ArchiveRequirementRequest struct {
+	Reason string `json:"reason"`
 }
 
 type ImportResult struct {
@@ -384,7 +391,7 @@ func (h *RequirementHandler) generateTaskIdentifier(systemType, queueName, contr
 type requirementListRow struct {
 	models.Requirement
 	ContractShortName            string `json:"contractShortName,omitempty"`
-	ContractUseShortNameInTaskID bool `json:"contractUseShortNameInTaskId,omitempty"`
+	ContractUseShortNameInTaskID bool   `json:"contractUseShortNameInTaskId,omitempty"`
 }
 
 func (h *RequirementHandler) List(c *gin.Context) {
@@ -509,6 +516,20 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 		return
 	}
 
+	resolvedFunctionID, resolvedTZPoint, resolvedNMCKPoint, err := h.resolveRequirementFunctionBinding(
+		contractName,
+		req.ContractTZFunctionID,
+		strings.TrimSpace(req.TZPointText),
+		strings.TrimSpace(req.NmckPointText),
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	req.ContractTZFunctionID = resolvedFunctionID
+	req.TZPointText = resolvedTZPoint
+	req.NmckPointText = resolvedNMCKPoint
+
 	// Если пользователь выбрал функцию ТЗ — формируем Пункт ТЗ из неё.
 	var selectedFunction *models.ContractTZFunction
 	if req.ContractTZFunctionID != nil {
@@ -553,7 +574,7 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 	}
 
 	if strings.TrimSpace(req.StatusText) == "" {
-		req.StatusText = "В обработку"
+		req.StatusText = defaultRequirementStatus
 	}
 
 	sys := normalizeRequirementSystemType(req.SystemType)
@@ -585,27 +606,27 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 	}
 
 	item := models.Requirement{
-		TaskIdentifier:      taskIdentifier,
-		ShortName:           strings.TrimSpace(req.ShortName),
-		Initiator:           strings.TrimSpace(req.Initiator),
-		ResponsiblePerson:   strings.TrimSpace(req.ResponsiblePerson),
-		SectionName:         strings.TrimSpace(req.SectionName),
-		ProposalText:        strings.TrimSpace(req.ProposalText),
-		ProblemComment:      strings.TrimSpace(req.ProblemComment),
-		DiscussionSummary:   strings.TrimSpace(req.DiscussionSummary),
-		ImplementationQueue: normalizedQueue,
-		NoteText:            strings.TrimSpace(req.NoteText),
-		TZPointText:         strings.TrimSpace(req.TZPointText),
-		NmckPointText:       strings.TrimSpace(req.NmckPointText),
-		StatusText:          strings.TrimSpace(req.StatusText),
-		SystemType:          sys,
-		DitOutgoingNumber:   strings.TrimSpace(req.DitOutgoingNumber),
-		DitOutgoingDate:     req.DitOutgoingDate,
-		AuthorName:          userName,
-		AuthorOrg:           userOrg,
-		LastEditedBy:        userName,
-		LastEditedOrg:       userOrg,
-		ContractName:        contractName,
+		TaskIdentifier:       taskIdentifier,
+		ShortName:            strings.TrimSpace(req.ShortName),
+		Initiator:            strings.TrimSpace(req.Initiator),
+		ResponsiblePerson:    strings.TrimSpace(req.ResponsiblePerson),
+		SectionName:          strings.TrimSpace(req.SectionName),
+		ProposalText:         strings.TrimSpace(req.ProposalText),
+		ProblemComment:       strings.TrimSpace(req.ProblemComment),
+		DiscussionSummary:    strings.TrimSpace(req.DiscussionSummary),
+		ImplementationQueue:  normalizedQueue,
+		NoteText:             strings.TrimSpace(req.NoteText),
+		TZPointText:          strings.TrimSpace(req.TZPointText),
+		NmckPointText:        strings.TrimSpace(req.NmckPointText),
+		StatusText:           strings.TrimSpace(req.StatusText),
+		SystemType:           sys,
+		DitOutgoingNumber:    strings.TrimSpace(req.DitOutgoingNumber),
+		DitOutgoingDate:      req.DitOutgoingDate,
+		AuthorName:           userName,
+		AuthorOrg:            userOrg,
+		LastEditedBy:         userName,
+		LastEditedOrg:        userOrg,
+		ContractName:         contractName,
 		ContractTZFunctionID: req.ContractTZFunctionID,
 	}
 
@@ -672,6 +693,20 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка сохранения ГК"})
 		return
 	}
+
+	resolvedFunctionID, resolvedTZPoint, resolvedNMCKPoint, err := h.resolveRequirementFunctionBinding(
+		contractName,
+		req.ContractTZFunctionID,
+		strings.TrimSpace(req.TZPointText),
+		strings.TrimSpace(req.NmckPointText),
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		return
+	}
+	req.ContractTZFunctionID = resolvedFunctionID
+	req.TZPointText = resolvedTZPoint
+	req.NmckPointText = resolvedNMCKPoint
 
 	userName := c.GetString("userName")
 	userOrg := c.GetString("userOrg")
@@ -789,7 +824,7 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 
 	oldStatus := strings.TrimSpace(item.StatusText)
 	if strings.TrimSpace(req.StatusText) == "" {
-		item.StatusText = "В обработку"
+		item.StatusText = defaultRequirementStatus
 	} else {
 		item.StatusText = strings.TrimSpace(req.StatusText)
 	}
@@ -1098,7 +1133,7 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 
 		statusText := getCellByHeader(row, headerMap, "Статус")
 		if statusText == "" {
-			statusText = "В обработку"
+			statusText = defaultRequirementStatus
 		}
 
 		systemCol := getCellByHeader(row, headerMap, "Система")
@@ -1158,13 +1193,13 @@ func (h *RequirementHandler) ImportRequirements(c *gin.Context) {
 				"п.п. нмцк",
 				"Пункт НМЦК",
 			),
-			StatusText:          statusText,
-			SystemType:          systemType,
-			AuthorName:          userName,
-			AuthorOrg:           userOrg,
-			LastEditedBy:        userName,
-			LastEditedOrg:       userOrg,
-			ContractName:        contractName,
+			StatusText:    statusText,
+			SystemType:    systemType,
+			AuthorName:    userName,
+			AuthorOrg:     userOrg,
+			LastEditedBy:  userName,
+			LastEditedOrg: userOrg,
+			ContractName:  contractName,
 		}
 
 		sequenceRaw := getCellByHeader(row, headerMap, "Порядковый номер", "Порядковый№", "№")
@@ -1341,6 +1376,17 @@ func (h *RequirementHandler) ExportRequirements(c *gin.Context) {
 }
 
 func (h *RequirementHandler) Archive(c *gin.Context) {
+	var req ArchiveRequirementRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный запрос"})
+		return
+	}
+	reason := strings.TrimSpace(strings.ToLower(req.Reason))
+	if reason != archiveReasonCompleted && reason != archiveReasonOutdated {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Укажите причину архивирования"})
+		return
+	}
+
 	var item models.Requirement
 	if err := h.db.First(&item, c.Param("id")).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Предложение не найдено"})
@@ -1358,6 +1404,7 @@ func (h *RequirementHandler) Archive(c *gin.Context) {
 
 	item.IsArchived = true
 	item.ArchivedAt = &now
+	item.ArchivedReason = reason
 	item.ArchivedBy = userName
 	item.ArchivedByOrg = userOrg
 	item.LastEditedBy = userName
@@ -1383,6 +1430,7 @@ func (h *RequirementHandler) Restore(c *gin.Context) {
 
 	item.IsArchived = false
 	item.ArchivedAt = nil
+	item.ArchivedReason = ""
 	item.ArchivedBy = ""
 	item.ArchivedByOrg = ""
 	item.LastEditedBy = userName
@@ -1390,6 +1438,32 @@ func (h *RequirementHandler) Restore(c *gin.Context) {
 
 	if err := h.db.Save(&item).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка восстановления"})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+// UnlinkGK — отвязать запись от ГК и связанной функции ТЗ.
+func (h *RequirementHandler) UnlinkGK(c *gin.Context) {
+	var item models.Requirement
+	if err := h.db.First(&item, c.Param("id")).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Предложение не найдено"})
+		return
+	}
+
+	userName := c.GetString("userName")
+	userOrg := c.GetString("userOrg")
+
+	item.ContractName = ""
+	item.ContractTZFunctionID = nil
+	item.TZPointText = ""
+	item.NmckPointText = ""
+	item.LastEditedBy = userName
+	item.LastEditedOrg = userOrg
+
+	if err := h.db.Save(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка отвязки ГК"})
 		return
 	}
 
@@ -1452,19 +1526,21 @@ func (h *RequirementHandler) GetGKLink(c *gin.Context) {
 	}
 
 	type dto struct {
-		HasFunction         bool   `json:"hasFunction"`
-		ContractID          uint   `json:"contractId"`
-		FunctionID          uint   `json:"functionId"`
-		ContractStageID     uint   `json:"contractStageId"`
-		ContractName        string `json:"contractName"`
-		StageNumber         int    `json:"stageNumber"`
-		StageName           string `json:"stageName"`
-		FunctionName        string `json:"functionName"`
-		TZSectionNumber     string `json:"tzSectionNumber"`
-		NmckFunctionNumber  string `json:"nmckFunctionNumber"`
-		JiraLink            string `json:"jiraLink"`
-		TZPointText         string `json:"tzPointText"`
-		NmckPointText       string `json:"nmckPointText"`
+		HasFunction        bool     `json:"hasFunction"`
+		ContractID         uint     `json:"contractId"`
+		FunctionID         uint     `json:"functionId"`
+		ContractStageID    uint     `json:"contractStageId"`
+		ContractName       string   `json:"contractName"`
+		StageNumber        int      `json:"stageNumber"`
+		StageName          string   `json:"stageName"`
+		FunctionName       string   `json:"functionName"`
+		TZSectionNumber    string   `json:"tzSectionNumber"`
+		NmckFunctionNumber string   `json:"nmckFunctionNumber"`
+		JiraLink           string   `json:"jiraLink"`
+		ConfluenceLinks    []string `json:"confluenceLinks"`
+		JiraEpicLinks      []string `json:"jiraEpicLinks"`
+		TZPointText        string   `json:"tzPointText"`
+		NmckPointText      string   `json:"nmckPointText"`
 	}
 
 	out := dto{
@@ -1501,8 +1577,61 @@ func (h *RequirementHandler) GetGKLink(c *gin.Context) {
 	out.TZSectionNumber = fn.TZSectionNumber
 	out.NmckFunctionNumber = fn.NMCKFunctionNumber
 	out.JiraLink = strings.TrimSpace(fn.JiraLink)
+	out.ConfluenceLinks = fn.ConfluenceLinks
+	out.JiraEpicLinks = fn.JiraEpicLinks
 
 	c.JSON(http.StatusOK, out)
+}
+
+func (h *RequirementHandler) resolveRequirementFunctionBinding(contractName string, functionID *uint, tzPointText, nmckPointText string) (*uint, string, string, error) {
+	contractName = strings.TrimSpace(contractName)
+	tzPointText = strings.TrimSpace(tzPointText)
+	nmckPointText = strings.TrimSpace(nmckPointText)
+
+	if functionID != nil {
+		var fn models.ContractTZFunction
+		if err := h.db.First(&fn, *functionID).Error; err != nil {
+			return nil, "", "", fmt.Errorf("некорректная выбранная функция ТЗ")
+		}
+		if contractName != "" {
+			var contract models.ContractDictionary
+			if err := h.db.Where("LOWER(name) = LOWER(?)", contractName).First(&contract).Error; err != nil {
+				return nil, "", "", fmt.Errorf("ошибка чтения ГК")
+			}
+			if fn.ContractID != contract.ID {
+				return nil, "", "", fmt.Errorf("функция ТЗ не принадлежит выбранной ГК")
+			}
+		}
+		resolvedTZ := strings.TrimSpace(fn.TZSectionNumber)
+		resolvedNMCK := strings.TrimSpace(fn.NMCKFunctionNumber)
+		return functionID, resolvedTZ, resolvedNMCK, nil
+	}
+
+	if contractName == "" || tzPointText == "" || nmckPointText == "" {
+		return nil, tzPointText, nmckPointText, nil
+	}
+
+	var contract models.ContractDictionary
+	if err := h.db.Where("LOWER(name) = LOWER(?)", contractName).First(&contract).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, tzPointText, nmckPointText, nil
+		}
+		return nil, "", "", fmt.Errorf("ошибка чтения ГК")
+	}
+
+	var matched models.ContractTZFunction
+	err := h.db.
+		Where("contract_id = ? AND TRIM(tz_section_number) = ? AND TRIM(nmck_function_number) = ?", contract.ID, tzPointText, nmckPointText).
+		First(&matched).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, tzPointText, nmckPointText, nil
+		}
+		return nil, "", "", fmt.Errorf("ошибка поиска функции ТЗ")
+	}
+
+	resolvedID := matched.ID
+	return &resolvedID, strings.TrimSpace(matched.TZSectionNumber), strings.TrimSpace(matched.NMCKFunctionNumber), nil
 }
 
 func (h *RequirementHandler) ensureContractExists(contractName string) error {

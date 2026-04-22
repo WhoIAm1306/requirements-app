@@ -6,6 +6,7 @@ import type {
   GKContractDetails,
   GKFunction,
   GKStage,
+  Requirement,
   UpdateGKContractPayload,
   UpsertGKFunctionPayload,
 } from '@/types'
@@ -32,6 +33,25 @@ export async function fetchGKFunctionsForStage(contractId: number, stageNumber: 
   return data
 }
 
+export async function fetchFunctionRequirements(contractId: number, functionId: number) {
+  const { data } = await apiClient.get<Requirement[]>(`/contracts/${contractId}/functions/${functionId}/requirements`)
+  return data
+}
+
+export async function bindRequirementsToFunction(contractId: number, functionId: number, requirementIds: number[]) {
+  const { data } = await apiClient.post(`/contracts/${contractId}/functions/${functionId}/requirements/bind`, {
+    requirementIds,
+  })
+  return data as { updated: number }
+}
+
+export async function unbindRequirementsFromFunction(contractId: number, functionId: number, requirementIds: number[]) {
+  const { data } = await apiClient.post(`/contracts/${contractId}/functions/${functionId}/requirements/unbind`, {
+    requirementIds,
+  })
+  return data as { updated: number }
+}
+
 export async function createGKContract(payload: CreateGKContractPayload) {
   const { data } = await apiClient.post(`/contracts`, payload)
   return data as GKContractDetails
@@ -44,6 +64,11 @@ export async function updateGKContract(contractId: number, payload: UpdateGKCont
 
 export async function createGKStage(contractId: number, payload: CreateGKStagePayload) {
   const { data } = await apiClient.post(`/contracts/${contractId}/stages`, payload)
+  return data
+}
+
+export async function updateGKStage(contractId: number, stageNumber: number, stageName: string) {
+  const { data } = await apiClient.put(`/contracts/${contractId}/stages/${stageNumber}`, { stageName })
   return data
 }
 

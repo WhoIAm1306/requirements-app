@@ -18,8 +18,30 @@
         <el-input v-model="form.tzSectionNumber" />
       </el-form-item>
 
-      <el-form-item label="Ссылка на Jira">
-        <el-input v-model="form.jiraLink" placeholder="https://… (необязательно)" />
+      <el-form-item label="Ссылки на Confluence">
+        <div class="links-group">
+          <div v-for="(link, idx) in form.confluenceLinks" :key="`cf-${idx}`" class="link-row">
+            <a :href="linkHref(link)" class="link-view" target="_blank" rel="noopener noreferrer">{{ link }}</a>
+            <el-button type="danger" plain @click="removeConfluenceLink(idx)">Удалить</el-button>
+          </div>
+          <div class="link-add-row">
+            <el-input v-model="newConfluenceLink" placeholder="https://confluence..." />
+            <el-button type="primary" plain @click="addConfluenceLink">Добавить</el-button>
+          </div>
+        </div>
+      </el-form-item>
+
+      <el-form-item label="Ссылки на Jira Epic">
+        <div class="links-group">
+          <div v-for="(link, idx) in form.jiraEpicLinks" :key="`je-${idx}`" class="link-row">
+            <a :href="linkHref(link)" class="link-view" target="_blank" rel="noopener noreferrer">{{ link }}</a>
+            <el-button type="danger" plain @click="removeJiraEpicLink(idx)">Удалить</el-button>
+          </div>
+          <div class="link-add-row">
+            <el-input v-model="newJiraEpicLink" placeholder="https://jira.../browse/KEY-123" />
+            <el-button type="primary" plain @click="addJiraEpicLink">Добавить</el-button>
+          </div>
+        </div>
       </el-form-item>
     </el-form>
 
@@ -31,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { upsertGKFunction } from '@/api/gkContracts'
 import type { GKFunction, UpsertGKFunctionPayload } from '@/types'
@@ -53,14 +75,43 @@ const emit = defineEmits<{
 
 const loading = defineModel<boolean>('loading', { default: false })
 
-const emptyForm = (): Omit<UpsertGKFunctionPayload, 'stageNumber'> => ({
+type FunctionDialogForm = Omit<UpsertGKFunctionPayload, 'stageNumber'> & {
+  confluenceLinks: string[]
+  jiraEpicLinks: string[]
+}
+
+const emptyForm = (): FunctionDialogForm => ({
   functionName: '',
   nmckFunctionNumber: '',
   tzSectionNumber: '',
   jiraLink: '',
+  confluenceLinks: [],
+  jiraEpicLinks: [],
 })
 
-const form = reactive<Omit<UpsertGKFunctionPayload, 'stageNumber'>>(emptyForm())
+const form = reactive<FunctionDialogForm>(emptyForm())
+const newConfluenceLink = ref('')
+const newJiraEpicLink = ref('')
+
+function normalizeLink(value: string) {
+  const v = value.trim()
+  if (!v) return ''
+  if (/^https?:\/\//i.test(v)) return v
+  return `https://${v}`
+}
+
+function linkHref(value: string) {
+  return normalizeLink(value)
+}
+
+function isValidHttpUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
 const dialogTitle = computed(() => {
   if (props.initialFunction?.id) {
@@ -78,12 +129,54 @@ watch(
       form.functionName = fn.functionName || ''
       form.nmckFunctionNumber = fn.nmckFunctionNumber || ''
       form.tzSectionNumber = fn.tzSectionNumber || ''
-      form.jiraLink = fn.jiraLink || ''
+      form.confluenceLinks = Array.isArray(fn.confluenceLinks) ? [...fn.confluenceLinks] : []
+      const epicLinks = Array.isArray(fn.jiraEpicLinks) ? [...fn.jiraEpicLinks] : []
+      const legacyJiraLink = (fn.jiraLink || '').trim()
+      if (legacyJiraLink && !epicLinks.some((x) => x.trim().toLowerCase() === legacyJiraLink.toLowerCase())) {
+        epicLinks.unshift(legacyJiraLink)
+      }
+      form.jiraEpicLinks = epicLinks
     } else {
       Object.assign(form, emptyForm())
     }
+    newConfluenceLink.value = ''
+    newJiraEpicLink.value = ''
   },
 )
+
+function addConfluenceLink() {
+  const next = normalizeLink(newConfluenceLink.value)
+  if (!next) return
+  if (!isValidHttpUrl(next)) {
+    ElMessage.warning('Некорректная ссылка Confluence')
+    return
+  }
+  if (!form.confluenceLinks.some((x) => x.trim().toLowerCase() === next.toLowerCase())) {
+    form.confluenceLinks = [...(form.confluenceLinks || []), next]
+  }
+  newConfluenceLink.value = ''
+}
+
+function removeConfluenceLink(index: number) {
+  form.confluenceLinks = (form.confluenceLinks || []).filter((_, i) => i !== index)
+}
+
+function addJiraEpicLink() {
+  const next = normalizeLink(newJiraEpicLink.value)
+  if (!next) return
+  if (!isValidHttpUrl(next)) {
+    ElMessage.warning('Некорректная ссылка Jira Epic')
+    return
+  }
+  if (!form.jiraEpicLinks.some((x) => x.trim().toLowerCase() === next.toLowerCase())) {
+    form.jiraEpicLinks = [...(form.jiraEpicLinks || []), next]
+  }
+  newJiraEpicLink.value = ''
+}
+
+function removeJiraEpicLink(index: number) {
+  form.jiraEpicLinks = (form.jiraEpicLinks || []).filter((_, i) => i !== index)
+}
 
 async function submit() {
   if (!props.contractId) return
@@ -96,7 +189,9 @@ async function submit() {
       functionName: form.functionName,
       nmckFunctionNumber: form.nmckFunctionNumber,
       tzSectionNumber: form.tzSectionNumber,
-      jiraLink: form.jiraLink?.trim() || '',
+      jiraLink: '',
+      confluenceLinks: (form.confluenceLinks || []).map((x) => x.trim()).filter(Boolean),
+      jiraEpicLinks: (form.jiraEpicLinks || []).map((x) => x.trim()).filter(Boolean),
     }
 
     if (!payload.functionName.trim()) {
@@ -123,3 +218,33 @@ async function submit() {
   }
 }
 </script>
+
+<style scoped>
+.links-group {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+}
+
+.link-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.link-add-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.link-view {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  color: #1e4d7b;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+</style>

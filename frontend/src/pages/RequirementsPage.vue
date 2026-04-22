@@ -28,16 +28,16 @@
               </template>
               <div class="summary-popover-grid">
                 <div class="summary-popover-row summary-popover-row--statuses">
-                  <el-card class="summary-card summary-card--mini status-card--processing" shadow="hover">
-                    <div class="summary-main-inline">
-                      <span class="summary-label summary-label--inline">В обработку</span>
-                      <span class="summary-value summary-value--inline">{{ countByStatus('В обработку') }}</span>
-                    </div>
-                  </el-card>
                   <el-card class="summary-card summary-card--mini status-card--new" shadow="hover">
                     <div class="summary-main-inline">
                       <span class="summary-label summary-label--inline">Новое</span>
                       <span class="summary-value summary-value--inline">{{ countByStatus('Новое') }}</span>
+                    </div>
+                  </el-card>
+                  <el-card class="summary-card summary-card--mini status-card--confirmed" shadow="hover">
+                    <div class="summary-main-inline">
+                      <span class="summary-label summary-label--inline">Подтверждено</span>
+                      <span class="summary-value summary-value--inline">{{ countByStatus('Подтверждено') }}</span>
                     </div>
                   </el-card>
                   <el-card class="summary-card summary-card--mini status-card--discussion" shadow="hover">
@@ -97,6 +97,7 @@
               Пользователи
             </el-button>
             <el-button @click="router.push('/gk-directory')">Справочник ГК</el-button>
+            <el-button @click="router.push('/functions-directory')">Справочник функций</el-button>
           </div>
           <el-dropdown trigger="click" placement="bottom-end" @command="handleUserMenuCommand">
             <button type="button" class="user-avatar-btn" :title="authStore.fullName">
@@ -221,6 +222,15 @@
                 @click="handleArchiveSelected"
               >
                 В архив ({{ selectedRows.length }})
+              </el-button>
+              <el-button
+                v-if="canEdit"
+                type="info"
+                plain
+                :disabled="selectedRows.length === 0"
+                @click="handleUnlinkGKSelected"
+              >
+                Отвязать ГК ({{ selectedRows.length }})
               </el-button>
               <el-button
                 v-if="canDeleteRequirements"
@@ -487,12 +497,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Close, MoreFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import {
+  type ArchiveRequirementReason,
   archiveRequirement,
   deleteAllRequirements,
   deleteRequirement,
   exportRequirementsFile,
   fetchRequirements,
   restoreRequirement,
+  unlinkRequirementGK,
 } from '@/api/requirements'
 import { fetchQueues } from '@/api/queues'
 import { debounce } from '@/utils/debounce'
@@ -587,6 +599,25 @@ let loadListSeq = 0
 const debouncedReloadList = debounce(() => {
   void loadData()
 }, 120)
+
+async function askArchiveReason(): Promise<ArchiveRequirementReason | null> {
+  try {
+    await ElMessageBox.confirm(
+      'Выберите причину архивации: предложение выполнено или больше не актуально?',
+      'Причина архивации',
+      {
+        type: 'warning',
+        confirmButtonText: 'Выполнено',
+        cancelButtonText: 'Не актуально',
+        distinguishCancelAndClose: true,
+      },
+    )
+    return 'completed'
+  } catch (error: any) {
+    if (error === 'cancel') return 'outdated'
+    return null
+  }
+}
 
 function clearSearchDebounce() {
   if (searchDebounceTimer) {
@@ -814,8 +845,10 @@ async function handleExport() {
  * Архивирование записи.
  */
 async function handleArchive(row: Requirement) {
+  const reason = await askArchiveReason()
+  if (!reason) return
   try {
-    await archiveRequirement(row.id)
+    await archiveRequirement(row.id, reason)
     ElMessage.success('Запись отправлена в архив')
     await loadData()
   } catch (error: any) {
@@ -885,8 +918,10 @@ async function handleArchiveSelected() {
   } catch {
     return
   }
+  const reason = await askArchiveReason()
+  if (!reason) return
   try {
-    await Promise.all(rows.map((row) => archiveRequirement(row.id)))
+    await Promise.all(rows.map((row) => archiveRequirement(row.id, reason)))
     ElMessage.success(`В архив отправлено: ${rows.length}`)
     await loadData()
   } catch (error: any) {
@@ -1030,6 +1065,38 @@ async function handleDeleteSelected() {
   }
 }
 
+async function handleUnlinkGKSelected() {
+  if (!canEdit.value) {
+    ElMessage.warning('Недостаточно прав для отвязки ГК')
+    return
+  }
+  const rows = selectedRows.value.filter((row) => (row.contractName || '').trim() !== '' || row.contractTZFunctionId)
+  if (!rows.length) {
+    ElMessage.info('Среди выбранных записей нет привязки к ГК')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `Отвязать ГК у выбранных записей: ${rows.length} шт.?`,
+      'Массовая отвязка ГК',
+      {
+        type: 'warning',
+        confirmButtonText: 'Отвязать',
+        cancelButtonText: 'Отмена',
+      },
+    )
+  } catch {
+    return
+  }
+  try {
+    await Promise.all(rows.map((row) => unlinkRequirementGK(row.id)))
+    ElMessage.success(`ГК отвязан у записей: ${rows.length}`)
+    await loadData()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || 'Ошибка массовой отвязки ГК')
+  }
+}
+
 async function handleDeleteAllRequirements() {
   try {
     await ElMessageBox.confirm(
@@ -1088,7 +1155,8 @@ function handleRowMenuCommand(cmd: string, row: Requirement) {
 }
 
 function getRowClassName({ row }: { row: Requirement }) {
-  return row.isArchived ? 'archived-row' : ''
+  if (!row.isArchived) return ''
+  return row.archivedReason === 'completed' ? 'archived-row archived-row--completed' : 'archived-row archived-row--outdated'
 }
 
 watch(
@@ -1484,19 +1552,19 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
 }
 
-.status-card--processing {
-  background: var(--el-color-warning-light-9);
-  border-color: var(--el-color-warning-light-7);
-}
-
 .status-card--new {
   background: var(--el-fill-color-lighter);
   border-color: var(--el-border-color);
 }
 
+.status-card--confirmed {
+  background: var(--el-color-primary-light-9);
+  border-color: var(--el-color-primary-light-7);
+}
+
 .status-card--discussion {
-  background: var(--el-color-danger-light-9);
-  border-color: var(--el-color-danger-light-7);
+  background: var(--el-color-warning-light-9);
+  border-color: var(--el-color-warning-light-7);
 }
 
 .status-card--accounted {
@@ -1505,8 +1573,8 @@ onBeforeUnmount(() => {
 }
 
 .status-card--done {
-  background: var(--el-color-primary-light-9);
-  border-color: var(--el-color-primary-light-7);
+  background: var(--el-color-success-light-8);
+  border-color: var(--el-color-success-light-5);
 }
 
 .status-card--other {
@@ -1869,6 +1937,14 @@ onBeforeUnmount(() => {
 
 <style>
 .archived-row td {
-  opacity: 0.7;
+  opacity: 1;
+}
+
+.archived-row--completed td {
+  background-color: #dff5df !important;
+}
+
+.archived-row--outdated td {
+  background-color: #fff4cc !important;
 }
 </style>

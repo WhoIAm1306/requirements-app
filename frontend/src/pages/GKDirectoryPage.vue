@@ -189,6 +189,16 @@
                   <div class="collapse-stage-header">
                     <span class="collapse-stage-title-text">{{ stageCollapseTitle(stage) }}</span>
                     <el-button
+                      v-if="canEditStages"
+                      type="primary"
+                      size="small"
+                      plain
+                      class="collapse-stage-rename"
+                      @click.stop="handleRenameStage(stage)"
+                    >
+                      Переименовать
+                    </el-button>
+                    <el-button
                       v-if="canDelete"
                       type="danger"
                       size="small"
@@ -440,6 +450,7 @@ import {
   downloadGKAttachment,
   uploadGKAttachments,
   updateGKContract,
+  updateGKStage,
 } from '@/api/gkContracts'
 import { downloadGKFunctionsTemplate } from '@/utils/excelTemplates'
 import GKContractDialog from '@/components/GKContractDialog.vue'
@@ -611,16 +622,54 @@ async function handleAddStage() {
   if (!selectedContractId.value) return
 
   try {
-    const { value } = await ElMessageBox.prompt('Введите номер этапа (например, 1, 2, 3)', 'Добавить этап', {
+    const { value: numberValue } = await ElMessageBox.prompt('Введите номер этапа (например, 1, 2, 3)', 'Добавить этап', {
       confirmButtonText: 'Добавить',
       cancelButtonText: 'Отмена',
       inputPattern: /^[1-9]\d*$/,
       inputErrorMessage: 'Введите положительное целое число',
     })
 
-    const stageNumber = Number(value)
-    const created = await createGKStage(selectedContractId.value, { stageNumber, stageName: '' })
+    const stageNumber = Number(numberValue)
+    let nameValue = ''
+    try {
+      const res = await ElMessageBox.prompt(
+        'Введите наименование этапа (необязательно)',
+        `Этап ${stageNumber}`,
+        {
+          confirmButtonText: 'Сохранить',
+          cancelButtonText: 'Пропустить',
+          inputValue: '',
+        },
+      )
+      nameValue = (res.value || '').trim()
+    } catch {
+      nameValue = ''
+    }
+    const created = await createGKStage(selectedContractId.value, {
+      stageNumber,
+      stageName: nameValue,
+    })
     ElMessage.success(`Этап ${created.stageNumber} готов`)
+    await reloadContractDetails()
+  } catch {
+    // cancel
+  }
+}
+
+async function handleRenameStage(stage: GKStage) {
+  if (!selectedContractId.value) return
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `Укажите наименование для этапа ${stage.stageNumber}`,
+      'Переименование этапа',
+      {
+        confirmButtonText: 'Сохранить',
+        cancelButtonText: 'Отмена',
+        inputValue: (stage.stageName || '').trim(),
+      },
+    )
+    await updateGKStage(selectedContractId.value, stage.stageNumber, (value || '').trim())
+    ElMessage.success('Наименование этапа обновлено')
     await reloadContractDetails()
   } catch {
     // cancel
@@ -1075,6 +1124,10 @@ onBeforeUnmount(() => {
 }
 
 .collapse-stage-delete {
+  flex-shrink: 0;
+}
+
+.collapse-stage-rename {
   flex-shrink: 0;
 }
 

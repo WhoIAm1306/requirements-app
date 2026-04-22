@@ -80,6 +80,13 @@
         </div>
 
         <div class="drawer-content-scroll">
+          <div
+            v-if="archiveNotice"
+            class="archive-notice"
+            :class="archiveNotice.type === 'completed' ? 'archive-notice--completed' : 'archive-notice--outdated'"
+          >
+            {{ archiveNotice.text }}
+          </div>
           <el-divider />
 
         <!--
@@ -660,6 +667,7 @@ import { createQueue, fetchQueues } from '@/api/queues'
 import { fetchContracts } from '@/api/contracts'
 import { fetchGKContractDetails, fetchGKFunctionsForStage, fetchGKStages } from '@/api/gkContracts'
 import {
+  type ArchiveRequirementReason,
   addRequirementComment,
   archiveRequirement,
   deleteRequirementComment,
@@ -736,6 +744,20 @@ const drawerTitle = computed(() => {
   return item.value?.taskIdentifier
     ? `Карточка предложения — ${item.value.taskIdentifier}`
     : 'Карточка предложения'
+})
+
+const archiveNotice = computed<null | { type: 'completed' | 'outdated'; text: string }>(() => {
+  if (!item.value?.isArchived) return null
+  if (item.value.archivedReason === 'completed') {
+    return {
+      type: 'completed',
+      text: 'Запись в архиве: предложение выполнено.',
+    }
+  }
+  return {
+    type: 'outdated',
+    text: 'Запись в архиве: предложение больше не актуально.',
+  }
 })
 
 /**
@@ -1089,10 +1111,12 @@ async function handleSave() {
  */
 async function handleArchive() {
   if (!item.value) return
+  const reason = await askArchiveReason()
+  if (!reason) return
 
   try {
     actionLoading.value = true
-    await archiveRequirement(item.value.id)
+    await archiveRequirement(item.value.id, reason)
     ElMessage.success('Запись отправлена в архив')
     await loadItem()
     emit('updated')
@@ -1100,6 +1124,25 @@ async function handleArchive() {
     ElMessage.error(error?.response?.data?.message || 'Ошибка архивирования')
   } finally {
     actionLoading.value = false
+  }
+}
+
+async function askArchiveReason(): Promise<ArchiveRequirementReason | null> {
+  try {
+    await ElMessageBox.confirm(
+      'Укажите причину архивации: предложение выполнено или больше не актуально?',
+      'Причина архивации',
+      {
+        type: 'warning',
+        confirmButtonText: 'Выполнено',
+        cancelButtonText: 'Не актуально',
+        distinguishCancelAndClose: true,
+      },
+    )
+    return 'completed'
+  } catch (error: any) {
+    if (error === 'cancel') return 'outdated'
+    return null
   }
 }
 
@@ -1382,6 +1425,26 @@ watch(
   min-height: 0;
   overflow-y: auto;
   padding: 0 20px 20px;
+}
+
+.archive-notice {
+  margin-top: 12px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.archive-notice--completed {
+  background: #dff5df;
+  color: #215c2f;
+  border: 1px solid #bfe3c3;
+}
+
+.archive-notice--outdated {
+  background: #fff4cc;
+  color: #7a4e12;
+  border: 1px solid #f0d68a;
 }
 
 .top-bar {

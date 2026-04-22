@@ -229,6 +229,8 @@ const editInitialFunction = computed<GKFunction | null>(() => {
     tzSectionNumber: i.tzSectionNumber || '',
 
     jiraLink: i.jiraLink || '',
+    confluenceLinks: Array.isArray(i.confluenceLinks) ? [...i.confluenceLinks] : [],
+    jiraEpicLinks: Array.isArray(i.jiraEpicLinks) ? [...i.jiraEpicLinks] : [],
 
     createdAt: '',
 

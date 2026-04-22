@@ -116,6 +116,8 @@ export interface GKFunction {
   nmckFunctionNumber: string
   tzSectionNumber: string
   jiraLink?: string
+  confluenceLinks?: string[]
+  jiraEpicLinks?: string[]
   createdAt: string
   updatedAt: string
 }
@@ -157,6 +159,8 @@ export interface UpsertGKFunctionPayload {
   nmckFunctionNumber: string
   tzSectionNumber: string
   jiraLink?: string
+  confluenceLinks?: string[]
+  jiraEpicLinks?: string[]
 }
 
 export interface ContractAttachmentItem {
@@ -231,6 +235,7 @@ export interface Requirement {
   lastEditedOrg: string
   isArchived: boolean
   archivedAt?: string | null
+  archivedReason?: 'completed' | 'outdated' | string
   archivedBy?: string
   archivedByOrg?: string
   comments?: CommentItem[]
