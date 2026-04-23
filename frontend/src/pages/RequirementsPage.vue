@@ -273,6 +273,16 @@
               </template>
             </el-dropdown>
             <el-button @click="handleExport">Экспорт Excel</el-button>
+            <el-tooltip :content="viewMode === 'table' ? 'Карточки' : 'Таблица'" placement="top">
+              <el-button class="view-toggle-btn" @click="toggleViewMode">
+                <span class="view-cubes-icon" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              </el-button>
+            </el-tooltip>
           </div>
         </div>
         <div class="toolbar-footer-toggle">
@@ -285,6 +295,7 @@
       <!-- Таблица: пагинация на клиенте — в DOM только текущая страница (быстрее, чем сотни строк) -->
       <el-card class="table-card" shadow="never">
         <div class="table-stack">
+          <template v-if="viewMode === 'table'">
           <div
             class="table-header-scroll"
             ref="tableHeaderScrollRef"
@@ -528,6 +539,72 @@
               />
             </div>
           </div>
+          </template>
+
+          <template v-else>
+            <div v-loading="loading" class="cards-wrap">
+              <div v-if="pagedItems.length > 0" class="requirements-cards-grid">
+                <article
+                  v-for="row in pagedItems"
+                  :key="row.id"
+                  class="requirement-list-card"
+                  :class="[
+                    cardToneClass(row),
+                    {
+                      'requirement-list-card--archived-completed': row.isArchived && row.archivedReason === 'completed',
+                      'requirement-list-card--archived-outdated': row.isArchived && row.archivedReason !== 'completed',
+                    },
+                  ]"
+                  @click="handleCardClick(row)"
+                >
+                  <div class="requirement-list-card__head">
+                    <div class="requirement-list-card__id-wrap">
+                      <span class="requirement-list-card__status-dot" :class="cardStatusDotClass(row.statusText)" />
+                      <div class="requirement-list-card__id">{{ row.taskIdentifier || `#${row.id}` }}</div>
+                    </div>
+                    <div class="requirement-list-card__head-tags">
+                      <QueueTag :queue="row.implementationQueue" />
+                      <StatusTag :status="row.statusText" />
+                    </div>
+                  </div>
+                  <div class="requirement-list-card__title">{{ row.shortName || 'Без наименования' }}</div>
+                  <div class="requirement-list-card__meta">
+                    <span>Приоритет: <strong>{{ row.implementationQueue || '—' }}</strong></span>
+                    <span>Система: <strong>{{ systemTypeLabel(row.systemType) }}</strong></span>
+                  </div>
+                  <div class="requirement-list-card__meta">
+                    <span>ГК: <strong>{{ row.contractName || '—' }}</strong></span>
+                  </div>
+                  <div class="requirement-list-card__text">{{ shortText(row.proposalText, 180) || '—' }}</div>
+                  <div class="requirement-list-card__footer">
+                    <span class="requirement-list-card__date">Создано: {{ formatTableDate(row.createdAt) }}</span>
+                    <span class="requirement-list-card__open">Открыть</span>
+                  </div>
+                  <label v-if="selectionMode" class="requirement-list-card__select" @click.stop>
+                    <input
+                      type="checkbox"
+                      :checked="isRowSelected(row.id)"
+                      @change="toggleCardSelection(row, ($event.target as HTMLInputElement).checked)"
+                    />
+                  </label>
+                </article>
+              </div>
+              <el-empty v-else description="Нет предложений по выбранным условиям" />
+            </div>
+            <div v-if="items.length > 0" class="table-pagination-panel">
+              <div class="table-pagination">
+                <el-pagination
+                  v-model:current-page="tablePage"
+                  v-model:page-size="tablePageSize"
+                  :page-sizes="[25, 50, 100, 200]"
+                  layout="total, sizes, prev, pager, next, jumper"
+                  :total="items.length"
+                  size="small"
+                  background
+                />
+              </div>
+            </div>
+          </template>
         </div>
       </el-card>
 
@@ -647,6 +724,7 @@ const tableWidth = computed(() => tableWidthBase + (selectionMode.value ? 48 : 0
 const tablePage = ref(1)
 const tablePageSize = ref(50)
 const showToolbarPanel = ref(true)
+const viewMode = ref<'table' | 'cards'>('table')
 
 const pagedItems = computed(() => {
   const list = [...items.value].sort(compareRequirementsBySequence)
@@ -975,6 +1053,56 @@ function exitSelectionMode() {
   dragSelectionActive.value = false
   dragVisitedRowIds.clear()
   tableRef.value?.clearSelection?.()
+}
+
+function toggleViewMode() {
+  if (selectionMode.value) {
+    exitSelectionMode()
+  }
+  viewMode.value = viewMode.value === 'table' ? 'cards' : 'table'
+}
+
+function handleCardClick(row: Requirement) {
+  if (selectionMode.value) return
+  selectedRequirementId.value = row.id
+  detailsVisible.value = true
+}
+
+function toggleCardSelection(row: Requirement, checked: boolean) {
+  const next = new Set(selectedRows.value.map((x) => x.id))
+  if (checked) next.add(row.id)
+  else next.delete(row.id)
+  selectedRows.value = items.value.filter((x) => next.has(x.id))
+}
+
+function normalizeStatusName(value: string) {
+  return (value || '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[^\p{L}\p{N}]/gu, '')
+}
+
+function cardStatusDotClass(statusText: string) {
+  const v = normalizeStatusName(statusText)
+  if (v.includes('выполн')) return 'is-done'
+  if (v.includes('подтвержд')) return 'is-confirmed'
+  if (v.includes('обсужд')) return 'is-discussion'
+  if (v.includes('учтен')) return 'is-accounted'
+  return 'is-new'
+}
+
+function cardToneClass(row: Requirement) {
+  if (row.isArchived) {
+    return row.archivedReason === 'completed'
+      ? 'requirement-list-card--tone-completed'
+      : 'requirement-list-card--tone-outdated'
+  }
+  const v = normalizeStatusName(row.statusText || '')
+  if (v.includes('выполн')) return 'requirement-list-card--tone-done'
+  if (v.includes('обсужд')) return 'requirement-list-card--tone-discussion'
+  if (v.includes('подтвержд')) return 'requirement-list-card--tone-confirmed'
+  if (v.includes('учтен')) return 'requirement-list-card--tone-accounted'
+  return 'requirement-list-card--tone-new'
 }
 
 function handleCellMouseEnter(row: Requirement, column: any, _cell: HTMLElement, event: MouseEvent) {
@@ -1445,6 +1573,25 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
 }
 
+.view-toggle-btn {
+  width: 36px;
+  padding: 0;
+}
+
+.view-cubes-icon {
+  display: grid;
+  grid-template-columns: repeat(2, 6px);
+  grid-template-rows: repeat(2, 6px);
+  gap: 3px;
+}
+
+.view-cubes-icon > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
 .reset-filters-btn {
   flex-shrink: 0;
 }
@@ -1793,6 +1940,185 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
+}
+
+.cards-wrap {
+  flex: 1 1 auto;
+  min-height: 280px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.requirements-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.requirement-list-card {
+  position: relative;
+  border: 1px solid #d7e1ef;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.requirement-list-card:hover {
+  transform: translateY(-2px);
+  border-color: #adc3e4;
+  box-shadow: 0 10px 24px rgba(26, 51, 91, 0.12);
+}
+
+.requirement-list-card:active {
+  transform: translateY(0);
+}
+
+.requirement-list-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.requirement-list-card__id-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.requirement-list-card__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #7b8ba7;
+  box-shadow: 0 0 0 3px rgba(123, 139, 167, 0.16);
+}
+
+.requirement-list-card__status-dot.is-new {
+  background: #7b8ba7;
+  box-shadow: 0 0 0 3px rgba(123, 139, 167, 0.16);
+}
+
+.requirement-list-card__status-dot.is-confirmed {
+  background: #2e7dd7;
+  box-shadow: 0 0 0 3px rgba(46, 125, 215, 0.16);
+}
+
+.requirement-list-card__status-dot.is-discussion {
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
+}
+
+.requirement-list-card__status-dot.is-accounted {
+  background: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16);
+}
+
+.requirement-list-card__status-dot.is-done {
+  background: #0e9f6e;
+  box-shadow: 0 0 0 3px rgba(14, 159, 110, 0.18);
+}
+
+.requirement-list-card__head-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.requirement-list-card__id {
+  font-size: 12px;
+  color: #58667d;
+  font-weight: 700;
+}
+
+.requirement-list-card__title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #1f2937;
+}
+
+.requirement-list-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 12px;
+  color: #475467;
+}
+
+.requirement-list-card__text {
+  font-size: 13px;
+  color: #3f4c5e;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.requirement-list-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: #637188;
+  border-top: 1px dashed #d7dfeb;
+  padding-top: 8px;
+}
+
+.requirement-list-card__select {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.requirement-list-card__open {
+  color: #1e4d7b;
+  font-weight: 600;
+}
+
+.requirement-list-card--tone-new {
+  border-left: 4px solid #7b8ba7;
+}
+
+.requirement-list-card--tone-confirmed {
+  border-left: 4px solid #2e7dd7;
+}
+
+.requirement-list-card--tone-discussion {
+  border-left: 4px solid #f59e0b;
+}
+
+.requirement-list-card--tone-accounted {
+  border-left: 4px solid #16a34a;
+}
+
+.requirement-list-card--tone-done,
+.requirement-list-card--tone-completed {
+  border-left: 4px solid #0e9f6e;
+}
+
+.requirement-list-card--tone-outdated {
+  border-left: 4px solid #d97706;
+}
+
+.requirement-list-card--archived-completed {
+  background: #dff5df;
+  border-color: #bfe3c3;
+}
+
+.requirement-list-card--archived-outdated {
+  background: #fff4cc;
+  border-color: #f0d68a;
 }
 
 .table-horizontal-wrap::-webkit-scrollbar {

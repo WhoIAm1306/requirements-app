@@ -1,9 +1,12 @@
 <template>
-  <el-drawer
+  <el-dialog
     class="requirement-details-drawer"
     :model-value="modelValue"
-    size="920px"
+    width="min(1600px, 96vw)"
+    top="2vh"
     :title="drawerTitle"
+    destroy-on-close
+    align-center
     @close="emit('update:modelValue', false)"
   >
     <div v-loading="loading" class="drawer-body">
@@ -11,22 +14,16 @@
         <div class="drawer-top-sticky">
           <div class="top-bar">
             <div class="meta-block">
-              <div class="meta-line"><span class="meta-label">ID:</span> {{ item.taskIdentifier }}</div>
-              <div class="meta-line"><span class="meta-label">Автор:</span> {{ item.authorName }}</div>
-              <div class="meta-line"><span class="meta-label">Организация автора:</span> {{ item.authorOrg }}</div>
-              <div class="meta-line">
-                <span class="meta-label">Последние изменения внес:</span>
-                {{ item.lastEditedBy || '—' }}
-                — {{ item.lastEditedOrg || '—' }}
-                — {{ formatDateTime(item.updatedAt) }}
+              <div class="meta-line-top">
+                <span class="meta-chip meta-chip--id">{{ item.taskIdentifier }}</span>
+                <span class="meta-chip">Автор: {{ item.authorName || '—' }}</span>
+                <span class="meta-chip">Орг.: {{ item.authorOrg || '—' }}</span>
               </div>
-              <div class="meta-line">
-                <span class="meta-label">Дата создания:</span>
-                {{ formatDateOnly(item.createdAt) }}
-              </div>
-              <div class="meta-line">
-                <span class="meta-label">Дата выполнения:</span>
-                {{ item.completedAt ? formatDateOnly(item.completedAt) : '—' }}
+              <div class="meta-line-bottom">
+                <span><b>Изменил:</b> {{ item.lastEditedBy || '—' }} · {{ item.lastEditedOrg || '—' }}</span>
+                <span><b>Обновлено:</b> {{ formatDateTime(item.updatedAt) }}</span>
+                <span><b>Создано:</b> {{ formatDateOnly(item.createdAt) }}</span>
+                <span><b>Выполнить до:</b> {{ item.completedAt ? formatDateOnly(item.completedAt) : '—' }}</span>
               </div>
             </div>
 
@@ -87,7 +84,7 @@
           >
             {{ archiveNotice.text }}
           </div>
-          <el-divider />
+          <el-divider v-if="archiveNotice" class="archive-divider" />
 
         <!--
           Режим редактирования:
@@ -95,223 +92,248 @@
         -->
         <template v-if="canManageRequirementCard">
           <el-form label-position="top" class="details-form">
-            <el-row :gutter="16">
-              <el-col :span="24">
-                <el-form-item label="Идентификатор задачи">
-                  <el-input
-                    v-model="form.taskIdentifier"
-                    placeholder="Уникальный идентификатор"
-                    :disabled="!canFullEdit"
-                  />
-                </el-form-item>
-              </el-col>
+            <div class="editor-layout">
+              <section class="editor-pane">
+                <div class="editor-section">
+                  <div class="editor-section__title">Основные данные</div>
+                  <el-row :gutter="14">
+                    <el-col :span="24">
+                      <el-form-item label="Идентификатор задачи">
+                        <el-input
+                          v-model="form.taskIdentifier"
+                          placeholder="Уникальный идентификатор"
+                          :disabled="!canFullEdit"
+                        />
+                      </el-form-item>
+                    </el-col>
 
-              <el-col :span="12">
-                <el-form-item label="Краткое наименование предложения">
-                  <el-input v-model="form.shortName" :disabled="fieldDisabled('shortName')" />
-                </el-form-item>
-              </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="Краткое наименование предложения">
+                        <el-input v-model="form.shortName" :disabled="fieldDisabled('shortName')" />
+                      </el-form-item>
+                    </el-col>
 
-              <el-col :span="12">
-                <el-form-item label="Инициатор">
-                  <el-input v-model="form.initiator" :disabled="fieldDisabled('initiator')" />
-                </el-form-item>
-              </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="Инициатор">
+                        <el-input v-model="form.initiator" :disabled="fieldDisabled('initiator')" />
+                      </el-form-item>
+                    </el-col>
 
-              <el-col :span="12">
-                <el-form-item label="Ответственный">
-                  <el-input
-                    v-model="form.responsiblePerson"
-                    :disabled="fieldDisabled('responsiblePerson')"
-                  />
-                </el-form-item>
-              </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="Ответственный">
+                        <el-input
+                          v-model="form.responsiblePerson"
+                          :disabled="fieldDisabled('responsiblePerson')"
+                        />
+                      </el-form-item>
+                    </el-col>
 
-              <el-col :span="12">
-                <el-form-item label="Раздел">
-                  <el-select
-                    v-model="form.sectionName"
-                    style="width: 100%"
-                    filterable
-                    allow-create
-                    default-first-option
-                    placeholder="Например, Телефония или свой текст"
-                    :disabled="fieldDisabled('sectionName')"
-                  >
-                    <el-option :label="TELEPHONY_SECTION" :value="TELEPHONY_SECTION" />
-                  </el-select>
-                  <div v-if="isTelephonySectionName(form.sectionName)" class="field-hint">
-                    Для раздела «{{ TELEPHONY_SECTION }}» выберите систему 112 или 101 в поле «Система».
-                  </div>
-                </el-form-item>
-              </el-col>
-
-              <el-col :span="12">
-                <el-form-item label="Приоритет">
-                  <el-select
-                    v-model="form.implementationQueue"
-                    style="width: 100%"
-                    :disabled="fieldDisabled('implementationQueue')"
-                  >
-                    <el-option
-                      v-for="queue in queues"
-                      :key="queue.id"
-                      :label="queue.name"
-                      :value="queue.name"
-                    />
-                    <template #footer>
-                      <div class="queue-select-footer">
-                        <el-button
-                          class="queue-select-add-btn"
-                          text
-                          :disabled="fieldDisabled('implementationQueue')"
-                          @click="openAddQueueDialog"
+                    <el-col :span="12">
+                      <el-form-item label="Раздел">
+                        <el-select
+                          v-model="form.sectionName"
+                          style="width: 100%"
+                          filterable
+                          allow-create
+                          default-first-option
+                          placeholder="Например, Телефония или свой текст"
+                          :disabled="fieldDisabled('sectionName')"
                         >
-                          <span class="queue-select-add-btn__plus">+</span>
-                          <span>Добавить новую очередь</span>
-                        </el-button>
-                      </div>
-                    </template>
-                  </el-select>
-                </el-form-item>
-              </el-col>
+                          <el-option :label="TELEPHONY_SECTION" :value="TELEPHONY_SECTION" />
+                        </el-select>
+                        <div v-if="isTelephonySectionName(form.sectionName)" class="field-hint">
+                          Для раздела «{{ TELEPHONY_SECTION }}» выберите систему 112 или 101 в поле «Система».
+                        </div>
+                      </el-form-item>
+                    </el-col>
 
-              <el-col :span="12">
-                <el-form-item label="ГК">
-                  <el-select
-                    v-model="form.contractName"
-                    placeholder="Выберите или введите наименование ГК"
-                    style="width: 100%"
-                    filterable
-                    allow-create
-                    default-first-option
-                    clearable
-                    :disabled="fieldDisabled('contractGk')"
-                    @change="onContractChange"
-                  >
-                    <el-option
-                      v-for="c in contractSelectOptions"
-                      :key="`${c.id}-${c.name}`"
-                      :label="c.name"
-                      :value="c.name"
-                    />
-                    <template #empty>
-                      <span class="select-empty">В справочнике пока нет ГК — введите наименование вручную.</span>
-                    </template>
-                  </el-select>
-                </el-form-item>
-              </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="Приоритет">
+                        <el-select
+                          v-model="form.implementationQueue"
+                          style="width: 100%"
+                          :disabled="fieldDisabled('implementationQueue')"
+                        >
+                          <el-option
+                            v-for="queue in queues"
+                            :key="queue.id"
+                            :label="queue.name"
+                            :value="queue.name"
+                          />
+                          <template #footer>
+                            <div class="queue-select-footer">
+                              <el-button
+                                class="queue-select-add-btn"
+                                text
+                                :disabled="fieldDisabled('implementationQueue')"
+                                @click="openAddQueueDialog"
+                              >
+                                <span class="queue-select-add-btn__plus">+</span>
+                                <span>Добавить новую очередь</span>
+                              </el-button>
+                            </div>
+                          </template>
+                        </el-select>
+                      </el-form-item>
+                    </el-col>
 
-              <el-col :span="12">
-                <el-form-item label="Статус">
-                  <el-select
-                    v-model="form.statusText"
-                    style="width: 100%"
-                    filterable
-                    allow-create
-                    default-first-option
-                    :disabled="fieldDisabled('statusText')"
-                  >
-                    <el-option
-                      v-for="s in STANDARD_REQUIREMENT_STATUSES"
-                      :key="s"
-                      :label="s"
-                      :value="s"
-                    />
-                  </el-select>
-                </el-form-item>
-              </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="Статус">
+                        <el-select
+                          v-model="form.statusText"
+                          style="width: 100%"
+                          filterable
+                          allow-create
+                          default-first-option
+                          :disabled="fieldDisabled('statusText')"
+                        >
+                          <el-option
+                            v-for="s in STANDARD_REQUIREMENT_STATUSES"
+                            :key="s"
+                            :label="s"
+                            :value="s"
+                          />
+                        </el-select>
+                      </el-form-item>
+                    </el-col>
 
-              <el-col :span="12">
-                <el-form-item label="Система">
-                  <el-select
-                    v-model="form.systemType"
-                    style="width: 100%"
-                    :disabled="fieldDisabled('systemType')"
-                    @change="onSystemTypeChange"
-                  >
-                    <el-option
-                      v-for="opt in SYSTEM_TYPE_OPTIONS"
-                      :key="opt.value"
-                      :label="opt.label"
-                      :value="opt.value"
-                    />
-                  </el-select>
-                </el-form-item>
-              </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="Система">
+                        <el-select
+                          v-model="form.systemType"
+                          style="width: 100%"
+                          :disabled="fieldDisabled('systemType')"
+                          @change="onSystemTypeChange"
+                        >
+                          <el-option
+                            v-for="opt in SYSTEM_TYPE_OPTIONS"
+                            :key="opt.value"
+                            :label="opt.label"
+                            :value="opt.value"
+                          />
+                        </el-select>
+                      </el-form-item>
+                    </el-col>
 
-              <el-col :span="24">
-                <el-form-item label="Предложение">
-                  <el-input
-                    v-model="form.proposalText"
-                    type="textarea"
-                    :autosize="{ minRows: 4, maxRows: 16 }"
-                    :disabled="fieldDisabled('proposalText')"
-                    class="drawer-textarea-tall"
-                  />
-                </el-form-item>
-              </el-col>
-
-              <el-col :span="24">
-                <el-form-item label="Комментарии и описание проблем">
-                  <el-input
-                    v-model="form.problemComment"
-                    type="textarea"
-                    :autosize="{ minRows: 4, maxRows: 16 }"
-                    :disabled="fieldDisabled('problemComment')"
-                    class="drawer-textarea-tall"
-                  />
-                </el-form-item>
-              </el-col>
-
-              <el-col :span="24">
-                <el-form-item label="Обсуждение">
-                  <el-input
-                    v-model="form.discussionSummary"
-                    type="textarea"
-                    :autosize="{ minRows: 4, maxRows: 16 }"
-                    :disabled="fieldDisabled('discussionSummary')"
-                    class="drawer-textarea-tall"
-                  />
-                </el-form-item>
-              </el-col>
-
-              <el-col :span="24">
-                <el-divider />
-
-                <el-form-item label="Этап">
-                  <el-select
-                    v-model="selectedStageNumber"
-                    placeholder="Сначала выберите ГК"
-                    style="width: 100%"
-                    :disabled="!selectedContractId || fieldDisabled('contractGk')"
-                    filterable
-                    @change="handleStageChange"
-                  >
-                    <el-option
-                      v-for="stage in stages"
-                      :key="stage.id"
-                      :label="stage.stageName || `Этап ${stage.stageNumber}`"
-                      :value="stage.stageNumber"
-                    />
-                    <template #empty>
-                      <span class="select-empty">К выбранной ГК не добавлены этапы (справочник ГК).</span>
-                    </template>
-                  </el-select>
-                </el-form-item>
-
-                <div class="tz-mode-toggle">
-                  <label class="tz-mode-toggle__row">
-                    <span class="tz-mode-toggle__label">Выбрать через ТЗ</span>
-                    <el-switch
-                      v-model="selectViaTz"
-                      :disabled="!selectedStageNumber || fieldDisabled('contractGk')"
-                    />
-                  </label>
+                    <el-col :span="12">
+                      <el-form-item label="Дата выполнения">
+                        <el-date-picker
+                          v-model="form.completedAt"
+                          type="date"
+                          style="width: 100%"
+                          value-format="YYYY-MM-DDTHH:mm:ss.SSSZ"
+                          clearable
+                          placeholder="По умолчанию при статусе «Выполнено»"
+                          :disabled="fieldDisabled('completedAt')"
+                        />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
                 </div>
 
-                <el-row :gutter="16">
-                  <el-col :span="12">
+                <div class="editor-section">
+                  <div class="editor-section__title">Содержание предложения</div>
+                  <el-form-item label="Предложение">
+                    <el-input
+                      v-model="form.proposalText"
+                      type="textarea"
+                      :autosize="{ minRows: 4, maxRows: 16 }"
+                      :disabled="fieldDisabled('proposalText')"
+                      class="drawer-textarea-tall"
+                    />
+                  </el-form-item>
+
+                  <el-form-item label="Комментарии и описание проблем">
+                    <el-input
+                      v-model="form.problemComment"
+                      type="textarea"
+                      :autosize="{ minRows: 4, maxRows: 16 }"
+                      :disabled="fieldDisabled('problemComment')"
+                      class="drawer-textarea-tall"
+                    />
+                  </el-form-item>
+
+                  <el-form-item label="Обсуждение">
+                    <el-input
+                      v-model="form.discussionSummary"
+                      type="textarea"
+                      :autosize="{ minRows: 4, maxRows: 16 }"
+                      :disabled="fieldDisabled('discussionSummary')"
+                      class="drawer-textarea-tall"
+                    />
+                  </el-form-item>
+
+                  <el-form-item label="Примечание">
+                    <el-input
+                      v-model="form.noteText"
+                      type="textarea"
+                      :autosize="{ minRows: 1, maxRows: 12 }"
+                      class="note-textarea"
+                      :disabled="fieldDisabled('noteText')"
+                    />
+                  </el-form-item>
+                </div>
+              </section>
+
+              <section class="editor-pane editor-pane--right">
+                <div class="editor-section">
+                  <div class="editor-section__title">Привязка к ГК и функции</div>
+                  <el-form-item label="ГК">
+                    <el-select
+                      v-model="form.contractName"
+                      placeholder="Выберите или введите наименование ГК"
+                      style="width: 100%"
+                      filterable
+                      allow-create
+                      default-first-option
+                      clearable
+                      :disabled="fieldDisabled('contractGk')"
+                      @change="onContractChange"
+                    >
+                      <el-option
+                        v-for="c in contractSelectOptions"
+                        :key="`${c.id}-${c.name}`"
+                        :label="c.name"
+                        :value="c.name"
+                      />
+                      <template #empty>
+                        <span class="select-empty">В справочнике пока нет ГК — введите наименование вручную.</span>
+                      </template>
+                    </el-select>
+                  </el-form-item>
+
+                  <div class="binding-grid">
+                    <el-form-item label="Этап" class="binding-stage">
+                      <el-select
+                        v-model="selectedStageNumber"
+                        placeholder="Сначала выберите ГК"
+                        style="width: 100%"
+                        :disabled="!selectedContractId || fieldDisabled('contractGk')"
+                        filterable
+                        @change="handleStageChange"
+                      >
+                        <el-option
+                          v-for="stage in stages"
+                          :key="stage.id"
+                          :label="stage.stageName || `Этап ${stage.stageNumber}`"
+                          :value="stage.stageNumber"
+                        />
+                        <template #empty>
+                          <span class="select-empty">К выбранной ГК не добавлены этапы (справочник ГК).</span>
+                        </template>
+                      </el-select>
+                    </el-form-item>
+
+                    <div class="tz-mode-toggle">
+                      <label class="tz-mode-toggle__row">
+                        <span class="tz-mode-toggle__label">Выбрать через ТЗ</span>
+                        <el-switch
+                          v-model="selectViaTz"
+                          :disabled="!selectedStageNumber || fieldDisabled('contractGk')"
+                        />
+                      </label>
+                    </div>
+
                     <el-form-item label="п.п. НМЦК">
                       <el-select
                         v-model="selectedNmckFunctionId"
@@ -333,9 +355,7 @@
                         </template>
                       </el-select>
                     </el-form-item>
-                  </el-col>
 
-                  <el-col :span="12">
                     <el-form-item label="п.п. ТЗ">
                       <el-select
                         v-if="selectViaTz"
@@ -367,59 +387,34 @@
                         class="tz-autofill-input"
                       />
                     </el-form-item>
-                  </el-col>
+                  </div>
+                </div>
 
-                </el-row>
-              </el-col>
+                <div class="editor-section">
+                  <div class="editor-section__title">Письмо в ДИТ</div>
 
-              <el-col :span="12">
-                <el-form-item label="Примечание">
-                  <el-input
-                    v-model="form.noteText"
-                    type="textarea"
-                  :autosize="{ minRows: 1, maxRows: 12 }"
-                  class="note-textarea"
-                    :disabled="fieldDisabled('noteText')"
-                  />
-                </el-form-item>
-              </el-col>
+                  <el-form-item label="Письмо в ДИТ — номер исходящего">
+                    <el-input
+                      v-model="form.ditOutgoingNumber"
+                      clearable
+                      :disabled="fieldDisabled('ditOutgoing')"
+                    />
+                  </el-form-item>
 
-              <el-col :span="12">
-                <el-form-item label="Дата выполнения">
-                  <el-date-picker
-                    v-model="form.completedAt"
-                    type="date"
-                    style="width: 100%"
-                    value-format="YYYY-MM-DDTHH:mm:ss.SSSZ"
-                    clearable
-                    placeholder="По умолчанию при статусе «Выполнено»"
-                    :disabled="fieldDisabled('completedAt')"
-                  />
-                </el-form-item>
-              </el-col>
+                  <el-form-item label="Письмо в ДИТ — дата">
+                    <el-date-picker
+                      v-model="form.ditOutgoingDate"
+                      type="date"
+                      style="width: 100%"
+                      value-format="YYYY-MM-DDTHH:mm:ss.SSSZ"
+                      clearable
+                      :disabled="fieldDisabled('ditOutgoing')"
+                    />
+                  </el-form-item>
+                </div>
+              </section>
 
-              <el-col :span="12">
-                <el-form-item label="Письмо в ДИТ — номер исходящего">
-                  <el-input
-                    v-model="form.ditOutgoingNumber"
-                    clearable
-                    :disabled="fieldDisabled('ditOutgoing')"
-                  />
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="Письмо в ДИТ — дата">
-                  <el-date-picker
-                    v-model="form.ditOutgoingDate"
-                    type="date"
-                    style="width: 100%"
-                    value-format="YYYY-MM-DDTHH:mm:ss.SSSZ"
-                    clearable
-                    :disabled="fieldDisabled('ditOutgoing')"
-                  />
-                </el-form-item>
-              </el-col>
-            </el-row>
+            </div>
           </el-form>
         </template>
 
@@ -530,132 +525,143 @@
           </div>
         </template>
 
-        <el-divider content-position="left">Вложения</el-divider>
+        <section class="details-bottom-panels">
+          <div class="content-two-col">
+            <section class="content-section content-section--comments dual-panel">
+              <div class="content-section__head">
+                <h4 class="content-section__title">Комментарии</h4>
+              </div>
+              <div class="dual-panel__body">
+                <div class="comments-list">
+                  <el-empty
+                    v-if="!item.comments || item.comments.length === 0"
+                    description="Комментариев пока нет"
+                    :image-size="0"
+                  />
 
-        <div class="attachments-block">
-          <el-empty
-            v-if="!item.attachments?.length"
-            description="Файлов пока нет"
-            :image-size="72"
-          />
+                  <div v-else class="comment-card" v-for="comment in item.comments" :key="comment.id">
+                    <div class="comment-header">
+                      <div class="comment-author">
+                        {{ comment.authorName }} · {{ comment.authorOrg }}
+                      </div>
+                      <div class="comment-right">
+                        <div class="comment-date">{{ formatDateTime(comment.createdAt) }}</div>
+                        <el-button
+                          v-if="canDeleteRequirementComment"
+                          size="small"
+                          type="danger"
+                          plain
+                          :loading="deleteCommentLoadingId === comment.id"
+                          @click="handleDeleteComment(comment.id)"
+                        >
+                          Удалить
+                        </el-button>
+                      </div>
+                    </div>
+                    <div class="comment-text">{{ comment.commentText }}</div>
+                  </div>
+                </div>
+              </div>
 
-          <div v-else class="attachments-list">
-            <div v-for="att in item.attachments" :key="att.id" class="attachment-row">
-              <span class="attachment-name">{{
-                att.libraryFile?.originalFileName || 'Файл'
-              }}</span>
-              <span class="attachment-meta">{{ formatDateTime(att.createdAt) }}</span>
-              <el-button size="small" @click="downloadAttachment(att)">Скачать</el-button>
-              <el-button
-                v-if="canEditAttachments"
-                size="small"
-                type="danger"
-                link
-                :loading="detachLoadingId === att.id"
-                @click="confirmDetachAttachment(att)"
-              >
-                Открепить
-              </el-button>
-            </div>
-          </div>
-
-          <template v-if="canEditAttachments">
-            <div class="attachments-toolbar">
-              <input
-                ref="reqFileInputRef"
-                type="file"
-                multiple
-                class="visually-hidden"
-                accept=".docx,.xls,.xlsx,.xlsm,.doc,.pdf,.msg,.pst"
-                @change="onReqAttachmentFilesPicked"
-              />
-              <el-button :loading="attachmentsUploading" @click="triggerReqAttachmentFilePick">
-                Загрузить файлы
-              </el-button>
-              <span class="attachments-hint">
-                Допустимые форматы: doc, docx, pdf, xls, xlsx, xlsm, msg, pst. Загруженные файлы сохраняются в
-                общую библиотеку — их можно снова прикрепить к другим предложениям.
-              </span>
-            </div>
-
-            <div class="library-attach-block">
-              <div class="library-attach-label">Ранее используемые файлы</div>
-              <el-select
-                v-model="libraryPickValue"
-                filterable
-                remote
-                clearable
-                reserve-keyword
-                placeholder="Поиск по имени файла — прикрепить без повторной загрузки"
-                :remote-method="searchRequirementLibraryRemote"
-                :loading="libraryLoading"
-                style="width: 100%"
-                @visible-change="onRequirementLibraryDropdownVisible"
-                @change="onRequirementLibraryPicked"
-              >
-                <el-option
-                  v-for="opt in libraryOptions"
-                  :key="opt.id"
-                  :label="requirementLibraryOptionLabel(opt)"
-                  :value="opt.id"
-                  :disabled="isLibraryFileAlreadyAttached(opt.id)"
+              <div v-if="canAddRequirementComment" class="comment-editor dual-panel__footer">
+                <el-input
+                  v-model="newCommentText"
+                  type="textarea"
+                  :autosize="{ minRows: 2, maxRows: 5 }"
+                  placeholder="Введите комментарий"
                 />
-              </el-select>
-            </div>
-          </template>
-        </div>
-
-        <el-divider />
-
-        <!-- Комментарии -->
-        <div class="comments-title">Комментарии</div>
-
-        <div class="comments-list">
-          <el-empty
-            v-if="!item.comments || item.comments.length === 0"
-            description="Комментариев пока нет"
-          />
-
-          <div v-else class="comment-card" v-for="comment in item.comments" :key="comment.id">
-            <div class="comment-header">
-              <div class="comment-author">
-                {{ comment.authorName }} · {{ comment.authorOrg }}
+                <div class="comment-editor-actions">
+                  <el-button type="primary" :loading="commentLoading" @click="handleAddComment">
+                    Добавить комментарий
+                  </el-button>
+                </div>
               </div>
-              <div class="comment-right">
-                <div class="comment-date">{{ formatDateTime(comment.createdAt) }}</div>
-                <el-button
-                  v-if="canDeleteRequirementComment"
-                  size="small"
-                  type="danger"
-                  plain
-                  :loading="deleteCommentLoadingId === comment.id"
-                  @click="handleDeleteComment(comment.id)"
-                >
-                  Удалить
-                </el-button>
-              </div>
-            </div>
-            <div class="comment-text">{{ comment.commentText }}</div>
-          </div>
-        </div>
+            </section>
 
-        <div v-if="canAddRequirementComment" class="comment-editor">
-          <el-input
-            v-model="newCommentText"
-            type="textarea"
-            :rows="3"
-            placeholder="Введите комментарий"
-          />
-          <div class="comment-editor-actions">
-            <el-button type="primary" :loading="commentLoading" @click="handleAddComment">
-              Добавить комментарий
-            </el-button>
+            <section class="content-section content-section--attachments dual-panel">
+              <div class="content-section__head">
+                <h4 class="content-section__title">Вложения</h4>
+              </div>
+              <div class="dual-panel__body">
+                <div class="attachments-block">
+                  <el-empty
+                    v-if="!item.attachments?.length"
+                    description="Файлов пока нет"
+                    :image-size="0"
+                  />
+
+                  <div v-else class="attachments-list">
+                    <div v-for="att in item.attachments" :key="att.id" class="attachment-row">
+                      <span class="attachment-name">{{ att.libraryFile?.originalFileName || 'Файл' }}</span>
+                      <span class="attachment-meta">{{ formatDateTime(att.createdAt) }}</span>
+                      <el-button size="small" @click="downloadAttachment(att)">Скачать</el-button>
+                      <el-button
+                        v-if="canEditAttachments"
+                        size="small"
+                        type="danger"
+                        link
+                        :loading="detachLoadingId === att.id"
+                        @click="confirmDetachAttachment(att)"
+                      >
+                        Открепить
+                      </el-button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <template v-if="canEditAttachments">
+                <div class="attachments-toolbar dual-panel__footer">
+                  <input
+                    ref="reqFileInputRef"
+                    type="file"
+                    multiple
+                    class="visually-hidden"
+                    accept=".docx,.xls,.xlsx,.xlsm,.doc,.pdf,.msg,.pst"
+                    @change="onReqAttachmentFilesPicked"
+                  />
+                  <el-button class="attachments-upload-btn" :loading="attachmentsUploading" @click="triggerReqAttachmentFilePick">
+                    Загрузить файлы
+                  </el-button>
+                  <span class="attachments-hint">
+                    Допустимые форматы: doc, docx, pdf, xls, xlsx, xlsm, msg, pst. Загруженные файлы сохраняются в
+                    общую библиотеку — их можно снова прикрепить к другим предложениям.
+                  </span>
+
+                  <div class="library-attach-block">
+                    <div class="library-attach-label">Ранее используемые файлы</div>
+                    <el-select
+                      v-model="libraryPickValue"
+                      filterable
+                      remote
+                      clearable
+                      reserve-keyword
+                      placeholder="Поиск по имени файла — прикрепить без повторной загрузки"
+                      :remote-method="searchRequirementLibraryRemote"
+                      :loading="libraryLoading"
+                      style="width: 100%"
+                      @visible-change="onRequirementLibraryDropdownVisible"
+                      @change="onRequirementLibraryPicked"
+                    >
+                      <el-option
+                        v-for="opt in libraryOptions"
+                        :key="opt.id"
+                        :label="requirementLibraryOptionLabel(opt)"
+                        :value="opt.id"
+                        :disabled="isLibraryFileAlreadyAttached(opt.id)"
+                      />
+                    </el-select>
+                  </div>
+                </div>
+              </template>
+            </section>
           </div>
-        </div>
+        </section>
+
         </div>
       </template>
     </div>
-  </el-drawer>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -1414,17 +1420,19 @@ watch(
   position: relative;
   z-index: 20;
   margin: 0;
-  padding: 0 20px 10px;
-  background-color: var(--el-bg-color);
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding: 8px 22px 12px;
+  background: #ffffff;
+  border-bottom: 1px solid #e8edf5;
   box-shadow: 0 1px 0 rgba(26, 35, 50, 0.04);
 }
 
 .drawer-content-scroll {
+  --details-two-col-ratio: minmax(0, 1.35fr) minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 20px 20px;
+  padding: 8px 22px 16px;
+  background: #f8fafd;
 }
 
 .archive-notice {
@@ -1450,32 +1458,63 @@ watch(
 .top-bar {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   align-items: flex-start;
   position: relative;
-  min-height: 148px;
+  min-height: 0;
 }
 
 .meta-block {
   display: grid;
-  gap: 6px;
+  gap: 8px;
+  flex: 1;
+  padding-top: 2px;
 }
 
-.meta-line {
-  font-size: 14px;
-  color: #344054;
+.meta-line-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
 }
 
-.meta-label {
-  font-weight: 700;
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid #dde5f1;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.meta-chip--id {
+  background: #2b4f73;
+  border-color: #2b4f73;
+  color: #fff;
+}
+
+.meta-line-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 12px;
+  color: #42556f;
+  line-height: 1.35;
+  margin-top: 2px;
 }
 
 .top-actions-grid {
-  display: grid;
-  grid-template-columns: auto auto;
+  display: inline-flex;
+  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
   margin-left: auto;
   align-self: start;
+  padding-top: 6px;
+  min-width: 0;
 }
 
 /* EP: .el-button + .el-button { margin-left: 12px } — из‑за этого «Удалить» съезжает вправо относительно «Сохранить» */
@@ -1483,37 +1522,112 @@ watch(
   margin-left: 0;
 }
 
-.top-btn-save {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.top-btn-secondary {
-  grid-column: 2;
-  grid-row: 1;
-}
-
 .top-btn-delete {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-}
-
-/* Нет «Сохранить» — вторичная кнопка в первой колонке, без пустой ячейки */
-.top-actions-grid:not(:has(.top-btn-save)) .top-btn-secondary {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.top-actions-grid:not(:has(.top-btn-save)) .top-btn-delete {
-  position: absolute;
-  right: 0;
-  bottom: 0;
+  position: static;
 }
 
 .details-form {
   display: grid;
-  gap: 8px;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.editor-layout {
+  display: grid;
+  grid-template-columns: var(--details-two-col-ratio);
+  gap: 12px;
+  align-items: start;
+}
+
+.editor-pane {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+}
+
+.editor-pane--right {
+  position: sticky;
+  top: 2px;
+}
+
+.editor-layout__full {
+  display: block;
+  min-width: 0;
+  margin-top: 10px;
+}
+
+.details-bottom-panels {
+  display: block;
+  min-width: 0;
+  margin-top: 12px;
+}
+
+.editor-section {
+  border: 1px solid #e4eaf3;
+  border-radius: 10px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.editor-section__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #2b3f58;
+}
+
+.details-form :deep(.el-form-item__label) {
+  font-weight: 700;
+  color: #1f3148;
+  padding-bottom: 4px;
+}
+
+.details-form :deep(.el-form-item--label-top .el-form-item__label) {
+  margin-bottom: 0;
+  margin-top: 8px;
+  padding-bottom: 4px;
+}
+
+.details-form :deep(.el-form-item) {
+  margin-bottom: 10px;
+}
+
+.editor-section :deep(.el-form-item:last-child) {
+  margin-bottom: 0;
+}
+
+.binding-zone :deep(.el-divider) {
+  margin: 4px 0 10px;
+}
+
+.archive-divider {
+  margin: 8px 0 10px;
+}
+
+.binding-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
+  gap: 8px 12px;
+  align-items: start;
+}
+
+.binding-stage {
+  margin-bottom: 0 !important;
+}
+
+.details-form :deep(.el-input__wrapper),
+.details-form :deep(.el-textarea__inner),
+.details-form :deep(.el-select__wrapper),
+.details-form :deep(.el-date-editor.el-input__wrapper) {
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px #dbe3ef inset;
+}
+
+.details-form :deep(.el-input__wrapper:hover),
+.details-form :deep(.el-textarea__inner:hover),
+.details-form :deep(.el-select__wrapper:hover),
+.details-form :deep(.el-date-editor.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px #c2d2e9 inset;
 }
 
 .readonly-grid {
@@ -1523,10 +1637,11 @@ watch(
 }
 
 .readonly-card {
-  border: 1px solid #e7ecf3;
-  border-radius: 14px;
-  padding: 12px 14px;
-  background: #fff;
+  border: 1px solid #e3e8f1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #ffffff;
+  box-shadow: none;
 }
 
 .readonly-card.full {
@@ -1589,19 +1704,78 @@ watch(
 .comments-title {
   font-size: 18px;
   font-weight: 700;
+  color: #1f2937;
+}
+
+.content-section {
+  border: 1px solid #e4eaf3;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 10px 12px 12px;
+  margin-top: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.content-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  margin-bottom: 8px;
+}
+
+.content-section__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #21344d;
+}
+
+.content-two-col {
+  display: grid;
+  grid-template-columns: var(--details-two-col-ratio);
+  gap: 12px;
+  align-items: start;
+}
+
+.content-two-col > .content-section {
+  min-width: 0;
+}
+
+.dual-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
+}
+
+.dual-panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.dual-panel__footer {
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding-top: 8px;
+  min-height: 0;
+  align-content: start;
 }
 
 .comments-list {
   display: grid;
   gap: 10px;
-  margin-bottom: 12px;
+  align-content: flex-start;
 }
 
 .comment-card {
-  border: 1px solid #e7ecf3;
-  border-radius: 14px;
-  padding: 12px 14px;
-  background: #fff;
+  border: 1px solid #e7edf6;
+  border-radius: 10px;
+  padding: 10px 11px;
+  background: #fbfcfe;
+  box-shadow: none;
 }
 
 .comment-header {
@@ -1614,12 +1788,13 @@ watch(
 
 .comment-author {
   font-weight: 600;
-  color: #344054;
+  color: #2f4058;
+  font-size: 13px;
 }
 
 .comment-date {
-  color: #667085;
-  font-size: 13px;
+  color: #748399;
+  font-size: 12px;
 }
 
 .comment-right {
@@ -1632,12 +1807,17 @@ watch(
 .comment-text {
   white-space: pre-wrap;
   word-break: break-word;
-  color: #1f2937;
+  color: #2d3d52;
+  line-height: 1.42;
 }
 
 .comment-editor {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+}
+
+.comment-editor :deep(.el-textarea__inner) {
+  min-height: 64px;
 }
 
 .comment-editor-actions {
@@ -1647,12 +1827,26 @@ watch(
 
 .attachments-block {
   display: grid;
-  gap: 14px;
+  gap: 10px;
+  align-content: flex-start;
 }
 
 .attachments-list {
   display: grid;
-  gap: 10px;
+  gap: 7px;
+  align-content: flex-start;
+}
+
+.comments-list :deep(.el-empty),
+.attachments-block :deep(.el-empty) {
+  margin: 2px 0 6px;
+  padding: 0;
+  min-height: 0;
+}
+
+.comments-list :deep(.el-empty__description),
+.attachments-block :deep(.el-empty__description) {
+  margin-top: 0;
 }
 
 .attachment-row {
@@ -1660,27 +1854,34 @@ watch(
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 14px;
-  padding: 10px 14px;
-  border: 1px solid #e7ecf3;
-  border-radius: 14px;
-  background: #fff;
+  padding: 8px 10px;
+  border: 1px solid #e7edf6;
+  border-radius: 10px;
+  background: #fbfcfe;
+  box-shadow: none;
 }
 
 .attachment-name {
   flex: 1 1 180px;
   font-weight: 600;
-  color: #1f2937;
+  color: #2f4058;
+  font-size: 13px;
   word-break: break-word;
 }
 
 .attachment-meta {
-  font-size: 13px;
-  color: #667085;
+  font-size: 12px;
+  color: #748399;
 }
 
 .attachments-toolbar {
   display: grid;
   gap: 8px;
+  margin-top: 4px;
+}
+
+.attachments-upload-btn {
+  width: fit-content;
 }
 
 .attachments-hint {
@@ -1747,7 +1948,12 @@ watch(
 }
 
 .tz-mode-toggle {
-  margin-bottom: 10px;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 42px;
+  padding: 0;
 }
 
 .tz-mode-toggle__row {
@@ -1766,6 +1972,28 @@ watch(
     flex-direction: column;
   }
 
+  .binding-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-pane--right {
+    position: static;
+  }
+
+  .content-two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .top-actions-grid {
+    min-width: 0;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .readonly-grid {
     grid-template-columns: 1fr;
   }
@@ -1775,35 +2003,54 @@ watch(
   }
 }
 /* Readonly вместо disabled: сохраняем возможность выделения/копирования текста. */
-::deep(.tz-autofill-input .el-textarea__inner[readonly]) {
-  color: var(--el-text-color-regular);
-  -webkit-text-fill-color: var(--el-text-color-regular);
-}
-
-/* Минимальная высота для «Примечание». */
-::deep(.note-textarea .el-textarea__inner) {
-  min-height: 30px;
-}
-
 :deep(.tz-autofill-input .el-textarea__inner[readonly]) {
   color: var(--el-text-color-regular);
   -webkit-text-fill-color: var(--el-text-color-regular);
 }
 
+/* Минимальная высота для «Примечание». */
 :deep(.note-textarea .el-textarea__inner) {
   min-height: 30px;
 }
 
 </style>
 
-<!-- Drawer через Teleport: scoped не всегда цепляется к .el-drawer__*; класс может быть на корне или обёртке -->
+<!-- Dialog через Teleport: scoped не всегда цепляется к .el-dialog__* -->
 <style>
-.requirement-details-drawer .el-drawer__header {
-  margin-bottom: 0 !important;
-  padding-bottom: 15px;
+.requirement-details-drawer.el-dialog {
+  max-height: 94vh;
+  height: 94vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f8fafd;
+  border: 1px solid #e1e7f0;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
 }
 
-.requirement-details-drawer .el-drawer__body {
+.requirement-details-drawer .el-dialog__header {
+  margin-bottom: 0 !important;
+  padding: 14px 22px 10px;
+  border-bottom: 1px solid #e1e7f0;
+  background: transparent;
+}
+
+.requirement-details-drawer .el-dialog__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1d2a3d;
+}
+
+.requirement-details-drawer .el-dialog__body {
   padding: 0 !important;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  max-height: calc(94vh - 74px);
+  background: transparent;
+}
+
+.el-overlay-dialog:has(.requirement-details-drawer) {
+  overflow: hidden !important;
 }
 </style>
