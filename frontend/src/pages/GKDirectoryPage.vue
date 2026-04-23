@@ -222,7 +222,7 @@
                     <el-table-column prop="functionName" label="Наименование функции" min-width="280" show-overflow-tooltip />
                     <el-table-column prop="nmckFunctionNumber" label="НМЦК" width="120" />
                     <el-table-column prop="tzSectionNumber" label="Раздел ТЗ" min-width="120" />
-                    <el-table-column label="Jira" width="130" class-name="jira-col">
+                    <el-table-column v-if="authStore.canAccessExternalLinks" label="Jira" width="130" class-name="jira-col">
                       <template #default="{ row: fnRow }">
                         <a
                           v-if="jiraHref(fnRow.jiraLink)"
@@ -416,6 +416,7 @@
         :contract-id="selectedContractId"
         :stage-number="functionDialogStageNumber"
         :initial-function="functionDialogInitialFunction"
+        :allow-links="authStore.canAccessExternalLinks"
         v-model:loading="functionDialogLoading"
         @saved="reloadContractDetails"
       />

@@ -97,7 +97,9 @@
               Пользователи
             </el-button>
             <el-button @click="router.push('/gk-directory')">Справочник ГК</el-button>
-            <el-button @click="router.push('/functions-directory')">Справочник функций</el-button>
+            <el-button v-if="authStore.canAccessFunctionsDirectory" @click="router.push('/functions-directory')">
+              Справочник функций
+            </el-button>
           </div>
           <el-dropdown trigger="click" placement="bottom-end" @command="handleUserMenuCommand">
             <button type="button" class="user-avatar-btn" :title="authStore.fullName">
@@ -113,8 +115,14 @@
         </div>
       </div>
 
+      <div v-if="!showToolbarPanel" class="toolbar-toggle-row">
+        <el-button text size="small" @click="showToolbarPanel = !showToolbarPanel">
+          Показать панель фильтров и действий
+        </el-button>
+      </div>
+
       <!-- Фильтры -->
-      <el-card class="toolbar-card" shadow="never">
+      <el-card v-show="showToolbarPanel" class="toolbar-card toolbar-card--scaled" shadow="never">
         <div class="toolbar-row">
           <div class="toolbar-left">
             <div class="main-filters">
@@ -266,6 +274,11 @@
             </el-dropdown>
             <el-button @click="handleExport">Экспорт Excel</el-button>
           </div>
+        </div>
+        <div class="toolbar-footer-toggle">
+          <el-button text size="small" @click="showToolbarPanel = false">
+            Скрыть
+          </el-button>
         </div>
       </el-card>
 
@@ -502,15 +515,18 @@
               </el-table>
             </div>
           </div>
-          <div v-if="items.length > 0" class="table-pagination">
-            <el-pagination
-              v-model:current-page="tablePage"
-              v-model:page-size="tablePageSize"
-              :page-sizes="[25, 50, 100, 200]"
-              layout="total, sizes, prev, pager, next, jumper"
-              :total="items.length"
-              background
-            />
+          <div v-if="items.length > 0" class="table-pagination-panel">
+            <div class="table-pagination">
+              <el-pagination
+                v-model:current-page="tablePage"
+                v-model:page-size="tablePageSize"
+                :page-sizes="[25, 50, 100, 200]"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="items.length"
+                size="small"
+                background
+              />
+            </div>
           </div>
         </div>
       </el-card>
@@ -630,6 +646,7 @@ const tableWidth = computed(() => tableWidthBase + (selectionMode.value ? 48 : 0
 /** Клиентская пагинация: меньше узлов в DOM → отзывчивее интерфейс. */
 const tablePage = ref(1)
 const tablePageSize = ref(50)
+const showToolbarPanel = ref(true)
 
 const pagedItems = computed(() => {
   const list = [...items.value].sort(compareRequirementsBySequence)
@@ -1706,6 +1723,24 @@ onBeforeUnmount(() => {
 
 .toolbar-card {
   min-width: 0;
+  position: relative;
+}
+
+.toolbar-toggle-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.toolbar-card--scaled :deep(.el-card__body) {
+  zoom: 0.92;
+}
+
+.toolbar-footer-toggle {
+  position: absolute;
+  right: 12px;
+  bottom: 8px;
+  z-index: 2;
 }
 
 .table-card {
@@ -1724,7 +1759,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 14px 16px;
+  padding: 10px 12px 8px;
   box-sizing: border-box;
 }
 
@@ -1778,13 +1813,36 @@ onBeforeUnmount(() => {
   width: max-content;
 }
 
-.table-pagination {
+.table-pagination-panel {
   flex-shrink: 0;
-  padding-top: 12px;
+  padding-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.table-pagination {
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 8px;
+  min-height: 28px;
+}
+
+.table-pagination :deep(.el-pagination) {
+  --el-pagination-font-size: 12px;
+}
+
+.table-pagination :deep(.el-pager li) {
+  min-width: 24px;
+  height: 24px;
+  line-height: 24px;
+}
+
+.table-pagination :deep(.btn-prev),
+.table-pagination :deep(.btn-next) {
+  min-width: 24px;
+  height: 24px;
 }
 
 .requirements-table {

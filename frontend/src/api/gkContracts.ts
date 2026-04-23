@@ -5,6 +5,9 @@ import type {
   ContractAttachmentItem,
   GKContractDetails,
   GKFunction,
+  GKFunctionCardView,
+  JiraEpicStatusItem,
+  JiraEpicStatusesFunctionItem,
   GKStage,
   Requirement,
   UpdateGKContractPayload,
@@ -31,6 +34,61 @@ export async function fetchGKFunctionsForStage(contractId: number, stageNumber: 
     `/contracts/${contractId}/stages/${stageNumber}/functions`,
   )
   return data
+}
+
+export function normalizeGKFunctionCards(items: GKFunction[]): GKFunctionCardView[] {
+  return normalizeGKFunctionCardsWithStatuses(items, {})
+}
+
+function deriveSyncStatus(epics: JiraEpicStatusItem[]) {
+  if (epics.length === 0) return 'unknown' as const
+  if (epics.some((x) => x.syncStatus === 'error')) return 'error' as const
+  if (epics.some((x) => x.syncStatus === 'synced')) return 'synced' as const
+  return 'planned' as const
+}
+
+export function normalizeGKFunctionCardsWithStatuses(
+  items: GKFunction[],
+  statusesByFunction: Record<number, JiraEpicStatusItem[]>,
+): GKFunctionCardView[] {
+  return items.map((item) => {
+    const confluenceLinks = Array.isArray(item.confluenceLinks) ? item.confluenceLinks.filter(Boolean) : []
+    const jiraEpicLinks = Array.isArray(item.jiraEpicLinks) ? item.jiraEpicLinks.filter(Boolean) : []
+    const epicStatuses = statusesByFunction[item.id] || []
+    return {
+      id: item.id,
+      contractId: item.contractId,
+      contractStageId: item.contractStageId,
+      functionName: item.functionName || '',
+      nmckFunctionNumber: item.nmckFunctionNumber || '',
+      tzSectionNumber: item.tzSectionNumber || '',
+      confluenceLinks,
+      jiraEpicLinks,
+      confluenceCount: confluenceLinks.length,
+      jiraEpicCount: jiraEpicLinks.length,
+      linksCount: confluenceLinks.length + jiraEpicLinks.length,
+      jiraEpicSyncStatus: deriveSyncStatus(epicStatuses),
+      jiraEpicStatuses: epicStatuses,
+    }
+  })
+}
+
+export async function fetchStageJiraEpicStatuses(contractId: number, stageNumber: number) {
+  const { data } = await apiClient.get<{ items: JiraEpicStatusesFunctionItem[] }>(
+    `/contracts/${contractId}/stages/${stageNumber}/functions/jira-epic-statuses`,
+  )
+  const byFunction: Record<number, JiraEpicStatusItem[]> = {}
+  for (const row of data.items || []) {
+    byFunction[row.functionId] = Array.isArray(row.epics) ? row.epics : []
+  }
+  return byFunction
+}
+
+export async function previewJiraEpicStatuses(links: string[]) {
+  const { data } = await apiClient.post<{ items: JiraEpicStatusItem[] }>(`/contracts/jira-epic-status-preview`, {
+    links,
+  })
+  return Array.isArray(data.items) ? data.items : []
 }
 
 export async function fetchFunctionRequirements(contractId: number, functionId: number) {

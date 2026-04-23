@@ -42,6 +42,16 @@ router.beforeEach((to) => {
   if (to.meta.requiresAdmin && !profile?.isSuperuser) {
     return '/requirements'
   }
+
+  if (to.path === '/functions-directory') {
+    const org = String(profile?.organization || '')
+      .toLowerCase()
+      .replace(/ё/g, 'е')
+      .replace(/[^a-zа-я0-9]/gi, '')
+    if (!org.includes('тантос')) {
+      return '/requirements'
+    }
+  }
 })
 
 export default router

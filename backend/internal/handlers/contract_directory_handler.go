@@ -1,16 +1,20 @@
 package handlers
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"requirements-app/backend/internal/config"
 	"requirements-app/backend/internal/models"
 
 	"github.com/gin-gonic/gin"
@@ -19,11 +23,23 @@ import (
 )
 
 type ContractDirectoryHandler struct {
-	db *gorm.DB
+	db              *gorm.DB
+	jiraBaseURL     string
+	jiraBearerToken string
+	jiraUserEmail   string
+	jiraAPIToken    string
+	httpClient      *http.Client
 }
 
-func NewContractDirectoryHandler(db *gorm.DB) *ContractDirectoryHandler {
-	return &ContractDirectoryHandler{db: db}
+func NewContractDirectoryHandler(db *gorm.DB, cfg *config.Config) *ContractDirectoryHandler {
+	return &ContractDirectoryHandler{
+		db:              db,
+		jiraBaseURL:     strings.TrimRight(strings.TrimSpace(cfg.JiraBaseURL), "/"),
+		jiraBearerToken: strings.TrimSpace(cfg.JiraBearerToken),
+		jiraUserEmail:   strings.TrimSpace(cfg.JiraUserEmail),
+		jiraAPIToken:    strings.TrimSpace(cfg.JiraAPIToken),
+		httpClient:      &http.Client{Timeout: 12 * time.Second},
+	}
 }
 
 type CreateContractRequest struct {
@@ -61,6 +77,25 @@ type ContractTZFunctionRequest struct {
 
 type FunctionRequirementsRequest struct {
 	RequirementIDs []uint `json:"requirementIds"`
+}
+
+type JiraEpicPreviewRequest struct {
+	Links []string `json:"links"`
+}
+
+type JiraEpicStatusItem struct {
+	Link           string `json:"link"`
+	EpicKey        string `json:"epicKey"`
+	Summary        string `json:"summary"`
+	Status         string `json:"status"`
+	StatusCategory string `json:"statusCategory"`
+	SyncStatus     string `json:"syncStatus"`
+	Error          string `json:"error,omitempty"`
+}
+
+type JiraEpicStatusesFunctionItem struct {
+	FunctionID uint                 `json:"functionId"`
+	Epics      []JiraEpicStatusItem `json:"epics"`
 }
 
 type GKImportResult struct {
@@ -754,6 +789,174 @@ func (h *ContractDirectoryHandler) functionByContractAndID(contractID uint, func
 		return nil, gorm.ErrRecordNotFound
 	}
 	return &fn, nil
+}
+
+var jiraEpicKeyRegex = regexp.MustCompile(`[A-Z][A-Z0-9]+-\d+`)
+
+func extractJiraEpicKey(value string) string {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		return ""
+	}
+	up := strings.ToUpper(raw)
+	if jiraEpicKeyRegex.MatchString(up) {
+		return jiraEpicKeyRegex.FindString(up)
+	}
+	return ""
+}
+
+func normalizeJiraEpicLinks(fn models.ContractTZFunction) []string {
+	links := make([]string, 0, len(fn.JiraEpicLinks)+1)
+	links = append(links, normalizeLinks(fn.JiraEpicLinks)...)
+	legacy := strings.TrimSpace(fn.JiraLink)
+	if legacy != "" {
+		links = append(links, legacy)
+	}
+	return normalizeLinks(links)
+}
+
+type jiraIssueResponse struct {
+	Fields struct {
+		Summary string `json:"summary"`
+		Status  struct {
+			Name           string `json:"name"`
+			StatusCategory struct {
+				Name string `json:"name"`
+			} `json:"statusCategory"`
+		} `json:"status"`
+	} `json:"fields"`
+}
+
+func (h *ContractDirectoryHandler) fetchJiraEpicIssue(epicKey string) (*jiraIssueResponse, error) {
+	if h.jiraBaseURL == "" {
+		return nil, fmt.Errorf("не задан JIRA_BASE_URL")
+	}
+	url := fmt.Sprintf("%s/rest/api/2/issue/%s?fields=summary,status", h.jiraBaseURL, epicKey)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	if h.jiraBearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+h.jiraBearerToken)
+	} else if h.jiraUserEmail != "" && h.jiraAPIToken != "" {
+		token := base64.StdEncoding.EncodeToString([]byte(h.jiraUserEmail + ":" + h.jiraAPIToken))
+		req.Header.Set("Authorization", "Basic "+token)
+	} else {
+		return nil, fmt.Errorf("не заданы креды Jira")
+	}
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("jira вернула статус %d", resp.StatusCode)
+	}
+
+	var out jiraIssueResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (h *ContractDirectoryHandler) buildJiraEpicStatusByLink(link string) JiraEpicStatusItem {
+	cleanLink := strings.TrimSpace(link)
+	key := extractJiraEpicKey(cleanLink)
+	if key == "" {
+		return JiraEpicStatusItem{
+			Link:       cleanLink,
+			SyncStatus: "error",
+			Error:      "Не удалось извлечь key эпика из ссылки",
+		}
+	}
+	issue, err := h.fetchJiraEpicIssue(key)
+	if err != nil {
+		return JiraEpicStatusItem{
+			Link:       cleanLink,
+			EpicKey:    key,
+			SyncStatus: "error",
+			Error:      err.Error(),
+		}
+	}
+	return JiraEpicStatusItem{
+		Link:           cleanLink,
+		EpicKey:        key,
+		Summary:        strings.TrimSpace(issue.Fields.Summary),
+		Status:         strings.TrimSpace(issue.Fields.Status.Name),
+		StatusCategory: strings.TrimSpace(issue.Fields.Status.StatusCategory.Name),
+		SyncStatus:     "synced",
+	}
+}
+
+// POST /api/contracts/jira-epic-status-preview
+func (h *ContractDirectoryHandler) PreviewJiraEpicStatuses(c *gin.Context) {
+	var req JiraEpicPreviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный запрос"})
+		return
+	}
+	links := normalizeLinks(req.Links)
+	if len(links) == 0 {
+		c.JSON(http.StatusOK, gin.H{"items": []JiraEpicStatusItem{}})
+		return
+	}
+	items := make([]JiraEpicStatusItem, 0, len(links))
+	for _, link := range links {
+		items = append(items, h.buildJiraEpicStatusByLink(link))
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+// GET /api/contracts/:id/stages/:stageNumber/functions/jira-epic-statuses
+func (h *ContractDirectoryHandler) GetJiraEpicStatusesForStageFunctions(c *gin.Context) {
+	contractID64, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный contractId"})
+		return
+	}
+	stageNumber, err := extractIntFromAny(strings.TrimSpace(c.Param("stageNumber")))
+	if err != nil || stageNumber <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный номер этапа"})
+		return
+	}
+
+	var stage models.ContractStage
+	if err := h.db.
+		Where("contract_id = ? AND stage_number = ?", uint(contractID64), stageNumber).
+		First(&stage).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Этап не найден"})
+		return
+	}
+
+	var functions []models.ContractTZFunction
+	if err := h.db.
+		Where("contract_stage_id = ?", stage.ID).
+		Order("id asc").
+		Find(&functions).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения функций ТЗ"})
+		return
+	}
+
+	out := make([]JiraEpicStatusesFunctionItem, 0, len(functions))
+	for _, fn := range functions {
+		item := JiraEpicStatusesFunctionItem{
+			FunctionID: fn.ID,
+			Epics:      make([]JiraEpicStatusItem, 0),
+		}
+		for _, link := range normalizeJiraEpicLinks(fn) {
+			item.Epics = append(item.Epics, h.buildJiraEpicStatusByLink(link))
+		}
+		out = append(out, item)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"items": out,
+	})
 }
 
 // GET /api/contracts/:id/functions/:functionId/requirements

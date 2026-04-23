@@ -37,7 +37,7 @@ func main() {
 	userHandler := handlers.NewUserHandler(database)
 	requirementHandler := handlers.NewRequirementHandler(database)
 	dictionaryHandler := handlers.NewDictionaryHandler(database)
-	contractDirectoryHandler := handlers.NewContractDirectoryHandler(database)
+	contractDirectoryHandler := handlers.NewContractDirectoryHandler(database, cfg)
 
 	// Создаём gin router.
 	r := gin.Default()
@@ -93,6 +93,8 @@ func main() {
 		read.GET("/contracts/:id", contractDirectoryHandler.GetContractDetails)
 		read.GET("/contracts/:id/stages", contractDirectoryHandler.ListStages)
 		read.GET("/contracts/:id/stages/:stageNumber/functions", contractDirectoryHandler.ListFunctionsForStage)
+		read.GET("/contracts/:id/stages/:stageNumber/functions/jira-epic-statuses", contractDirectoryHandler.GetJiraEpicStatusesForStageFunctions)
+		read.POST("/contracts/jira-epic-status-preview", contractDirectoryHandler.PreviewJiraEpicStatuses)
 		read.GET("/contracts/:id/functions/:functionId/requirements", contractDirectoryHandler.ListFunctionRequirements)
 		read.GET("/contracts/:id/attachments", contractDirectoryHandler.ListContractAttachments)
 		read.GET("/contracts/attachments/:attachmentId/download", contractDirectoryHandler.DownloadContractAttachment)
