@@ -71,6 +71,7 @@ Frontend:
 
 Docs:
 - `docs/ADMIN_USERS_IMPORT_EXPORT_HINTS.md` — нюансы импорта/экспорта пользователей и грантов.
+- `docs/SPISOK_UI_REFERENCE.md` — карта UI-референса `spisok` (какие компоненты и какие паттерны брать для верстки списка).
 
 ## 4) Архитектура по потокам (куда идти при задаче)
 
@@ -224,3 +225,18 @@ Frontend capability-флаги:
   - `edit`,
   - `superuser`.
 - Не утекли секреты/локальные uploads в git.
+
+## 11) UI референс spisok (для нового чата)
+
+Если задача про "сделать как в Figma/spisok", использовать:
+- опорный документ: `docs/SPISOK_UI_REFERENCE.md`;
+- источник референса: `C:/Users/D.Zinovev/Desktop/spisok`.
+
+Порядок переноса в `RequirementsPage.vue`:
+1. `HeaderToolbar` (поиск/добавить/экспорт);
+2. `FilterBar` (ряд фильтров);
+3. `ColumnHeaders` + grid;
+4. `RequirementRowCard` (строка-как-компонент);
+5. `BulkActionsBar` и `PaginationBar`.
+
+Важно: переносить только верстку/UX-паттерны, а данные и действия оставлять из текущего `requirements-app`.

@@ -2,105 +2,103 @@
   <div class="page">
     <div class="page-shell">
       <!-- Шапка -->
-      <div class="page-header">
-        <div class="page-header-left">
-          <div class="page-title-row">
-            <div class="page-title-block">
-              <h2 class="page-title">Учет предложений</h2>
-              <div class="meta">{{ authStore.fullName }}</div>
-            </div>
-            <el-popover
-              trigger="hover"
-              placement="bottom-start"
-              popper-class="summary-popover-popper"
-              :popper-style="{
-                width: 'fit-content',
-                maxWidth: 'calc(100vw - 24px)',
-              }"
+      <div class="page-header page-header--dark">
+        <div class="page-header-left page-header-left--dark">
+          <div class="brand-pill">Учет предложений</div>
+          <div class="header-filter-preset">
+            <button
+              type="button"
+              class="header-filter-preset__btn"
+              :class="{ 'is-active': listFilterPreset === 'all' }"
+              @click="setListFilterPreset('all')"
             >
-              <template #reference>
-                <el-card class="summary-card summary-card--main" shadow="hover">
-                  <div class="summary-main-inline">
-                    <span class="summary-label summary-label--inline">Всего записей</span>
-                    <span class="summary-value summary-value--inline">{{ items.length }}</span>
-                  </div>
-                </el-card>
-              </template>
-              <div class="summary-popover-grid">
-                <div class="summary-popover-row summary-popover-row--statuses">
-                  <el-card class="summary-card summary-card--mini status-card--new" shadow="hover">
-                    <div class="summary-main-inline">
-                      <span class="summary-label summary-label--inline">Новое</span>
-                      <span class="summary-value summary-value--inline">{{ countByStatus('Новое') }}</span>
-                    </div>
-                  </el-card>
-                  <el-card class="summary-card summary-card--mini status-card--confirmed" shadow="hover">
-                    <div class="summary-main-inline">
-                      <span class="summary-label summary-label--inline">Подтверждено</span>
-                      <span class="summary-value summary-value--inline">{{ countByStatus('Подтверждено') }}</span>
-                    </div>
-                  </el-card>
-                  <el-card class="summary-card summary-card--mini status-card--discussion" shadow="hover">
-                    <div class="summary-main-inline">
-                      <span class="summary-label summary-label--inline">Требуется обсуждение</span>
-                      <span class="summary-value summary-value--inline">
-                        {{ countByStatus('Требуется обсуждение') }}
-                      </span>
-                    </div>
-                  </el-card>
-                  <el-card class="summary-card summary-card--mini status-card--accounted" shadow="hover">
-                    <div class="summary-main-inline">
-                      <span class="summary-label summary-label--inline">Учтено</span>
-                      <span class="summary-value summary-value--inline">{{ countByStatus('Учтено') }}</span>
-                    </div>
-                  </el-card>
-                  <el-card class="summary-card summary-card--mini status-card--done" shadow="hover">
-                    <div class="summary-main-inline">
-                      <span class="summary-label summary-label--inline">Выполнено</span>
-                      <span class="summary-value summary-value--inline">{{ countByStatus('Выполнено') }}</span>
-                    </div>
-                  </el-card>
-                </div>
-
-                <div class="summary-popover-row summary-popover-row--queues">
-                  <el-card
-                    v-for="queue in queues"
-                    :key="queue.id"
-                    class="summary-card summary-card--mini"
-                    :class="queueSummaryCardClass(queue.name)"
-                    shadow="hover"
-                  >
-                    <div class="summary-main-inline">
-                      <span class="summary-label summary-label--inline">{{ queue.name }}</span>
-                      <span class="summary-value summary-value--inline">{{ countByQueue(queue.name) }}</span>
-                    </div>
-                  </el-card>
-                </div>
-              </div>
-            </el-popover>
-            <span class="meta-badge">{{ authStore.organization }}</span>
+              Все
+            </button>
+            <button
+              type="button"
+              class="header-filter-preset__btn"
+              :class="{ 'is-active': listFilterPreset === 'sys112' }"
+              @click="setListFilterPreset('sys112')"
+            >
+              Система 112
+            </button>
+            <button
+              type="button"
+              class="header-filter-preset__btn"
+              :class="{ 'is-active': listFilterPreset === 'sys101' }"
+              @click="setListFilterPreset('sys101')"
+            >
+              Система 101
+            </button>
+            <button
+              type="button"
+              class="header-filter-preset__btn"
+              :class="{ 'is-active': listFilterPreset === 'tel112' }"
+              @click="setListFilterPreset('tel112')"
+            >
+              Телефония 112
+            </button>
+            <button
+              type="button"
+              class="header-filter-preset__btn"
+              :class="{ 'is-active': listFilterPreset === 'tel101' }"
+              @click="setListFilterPreset('tel101')"
+            >
+              Телефония 101
+            </button>
           </div>
         </div>
 
-        <div class="header-actions">
-          <div class="header-before-avatar">
-            <el-button
-              v-if="authStore.isSuperuser"
-              text
-              class="header-btn-delete-all"
-              :loading="deleteAllLoading"
-              @click="handleDeleteAllRequirements"
-            >
-              Удалить все предложения
-            </el-button>
-            <el-button v-if="authStore.isSuperuser" @click="router.push('/admin/users')">
-              Пользователи
-            </el-button>
-            <el-button @click="router.push('/gk-directory')">Справочник ГК</el-button>
-            <el-button v-if="authStore.canAccessFunctionsDirectory" @click="router.push('/functions-directory')">
-              Справочник функций
-            </el-button>
+        <div class="header-actions header-actions--dark">
+          <div class="variant-switch variant-switch--right">
+            <span class="variant-switch__label">Вариант:</span>
+            <div class="variant-switch__group" role="tablist" aria-label="Вариант отображения">
+              <button
+                type="button"
+                class="variant-switch__option"
+                :class="{ 'is-active': viewMode === 'table' }"
+                role="tab"
+                :aria-selected="viewMode === 'table'"
+                @click="setViewMode('table')"
+              >
+                A — Табличный
+              </button>
+              <button
+                type="button"
+                class="variant-switch__option"
+                :class="{ 'is-active': viewMode === 'cards' }"
+                role="tab"
+                :aria-selected="viewMode === 'cards'"
+                @click="setViewMode('cards')"
+              >
+                B — Карточный
+              </button>
+            </div>
           </div>
+          <el-dropdown
+            trigger="click"
+            placement="bottom-end"
+            @command="handleSectionsMenuCommand"
+            @visible-change="handleSectionsDropdownVisibleChange"
+          >
+            <el-button class="sections-btn">
+              Разделы
+              <el-icon class="el-icon--right sections-btn__arrow" :class="{ 'is-open': sectionsDropdownOpen }">
+                <ArrowDown />
+              </el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="gk-directory">Справочник ГК</el-dropdown-item>
+                <el-dropdown-item v-if="authStore.canAccessFunctionsDirectory" command="functions-directory">
+                  Справочник функций
+                </el-dropdown-item>
+                <el-dropdown-item v-if="authStore.isSuperuser" command="admin-panel" divided>
+                  Административная панель
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-dropdown trigger="click" placement="bottom-end" @command="handleUserMenuCommand">
             <button type="button" class="user-avatar-btn" :title="authStore.fullName">
               {{ userAvatarLetters }}
@@ -108,7 +106,109 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="profile">Профиль</el-dropdown-item>
+                <el-dropdown-item command="change-password">Сменить пароль</el-dropdown-item>
                 <el-dropdown-item divided command="logout">Выйти</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </div>
+
+      <div class="registry-topbar">
+        <div class="registry-topbar__left">
+          <h1 class="registry-topbar__title">Реестр предложений</h1>
+          <el-popover
+            trigger="hover"
+            placement="bottom-start"
+            popper-class="summary-popover-popper"
+            :popper-style="{
+              width: 'fit-content',
+              maxWidth: 'calc(100vw - 24px)',
+            }"
+          >
+            <template #reference>
+              <el-card class="summary-card summary-card--main summary-card--nav" shadow="hover">
+                <div class="summary-main-inline">
+                  <span class="summary-label summary-label--inline">Всего записей</span>
+                  <span class="summary-value summary-value--inline">{{ items.length }}</span>
+                </div>
+              </el-card>
+            </template>
+            <div class="summary-popover-grid">
+              <div class="summary-popover-row summary-popover-row--statuses">
+                <el-card class="summary-card summary-card--mini status-card--new" shadow="hover">
+                  <div class="summary-main-inline">
+                    <span class="summary-label summary-label--inline">Новое</span>
+                    <span class="summary-value summary-value--inline">{{ countByStatus('Новое') }}</span>
+                  </div>
+                </el-card>
+                <el-card class="summary-card summary-card--mini status-card--confirmed" shadow="hover">
+                  <div class="summary-main-inline">
+                    <span class="summary-label summary-label--inline">Подтверждено</span>
+                    <span class="summary-value summary-value--inline">{{ countByStatus('Подтверждено') }}</span>
+                  </div>
+                </el-card>
+                <el-card class="summary-card summary-card--mini status-card--discussion" shadow="hover">
+                  <div class="summary-main-inline">
+                    <span class="summary-label summary-label--inline">Требуется обсуждение</span>
+                    <span class="summary-value summary-value--inline">
+                      {{ countByStatus('Требуется обсуждение') }}
+                    </span>
+                  </div>
+                </el-card>
+                <el-card class="summary-card summary-card--mini status-card--accounted" shadow="hover">
+                  <div class="summary-main-inline">
+                    <span class="summary-label summary-label--inline">Учтено</span>
+                    <span class="summary-value summary-value--inline">{{ countByStatus('Учтено') }}</span>
+                  </div>
+                </el-card>
+                <el-card class="summary-card summary-card--mini status-card--done" shadow="hover">
+                  <div class="summary-main-inline">
+                    <span class="summary-label summary-label--inline">Выполнено</span>
+                    <span class="summary-value summary-value--inline">{{ countByStatus('Выполнено') }}</span>
+                  </div>
+                </el-card>
+              </div>
+              <div class="summary-popover-row summary-popover-row--queues">
+                <el-card
+                  v-for="queue in queues"
+                  :key="queue.id"
+                  class="summary-card summary-card--mini"
+                  :class="queueSummaryCardClass(queue.name)"
+                  shadow="hover"
+                >
+                  <div class="summary-main-inline">
+                    <span class="summary-label summary-label--inline">{{ queue.name }}</span>
+                    <span class="summary-value summary-value--inline">{{ countByQueue(queue.name) }}</span>
+                  </div>
+                </el-card>
+              </div>
+            </div>
+          </el-popover>
+        </div>
+        <div class="registry-topbar__right">
+          <el-input
+            v-model="search"
+            placeholder="Поиск по реестру..."
+            clearable
+            class="registry-topbar__search"
+          />
+          <el-button v-if="canEdit" type="primary" class="registry-topbar__add-btn" @click="createDialogVisible = true">
+            <el-icon><Plus /></el-icon>
+            Добавить запись
+          </el-button>
+          <el-button class="registry-topbar__export-btn" @click="handleExport">Экспорт Excel</el-button>
+          <el-dropdown trigger="click" placement="bottom-end" popper-class="header-tools-dropdown" @command="handleHeaderToolsCommand">
+            <el-button class="registry-topbar__more-btn">...</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item v-if="canEdit || canDeleteRequirements" command="toggle-selection">
+                  {{ selectionMode ? 'Завершить выделение' : 'Выделить' }}
+                </el-dropdown-item>
+                <el-dropdown-item v-if="canEdit" command="import">Импорт предложений</el-dropdown-item>
+                <el-dropdown-item v-if="canEdit" command="template">Шаблон предложений (Excel)</el-dropdown-item>
+                <el-dropdown-item command="print" divided>Печать реестра</el-dropdown-item>
+                <el-dropdown-item command="history">Журнал изменений</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -126,48 +226,29 @@
         <div class="toolbar-row">
           <div class="toolbar-left">
             <div class="main-filters">
-              <el-button
-                :type="listFilterPreset === 'all' ? 'primary' : 'default'"
-                @click="setListFilterPreset('all')"
-              >
-                Все
-              </el-button>
-              <el-button
-                :type="listFilterPreset === 'sys112' ? 'primary' : 'default'"
-                @click="setListFilterPreset('sys112')"
-              >
-                Система 112
-              </el-button>
-              <el-button
-                :type="listFilterPreset === 'sys101' ? 'primary' : 'default'"
-                @click="setListFilterPreset('sys101')"
-              >
-                Система 101
-              </el-button>
-              <el-button
-                :type="listFilterPreset === 'tel112' ? 'primary' : 'default'"
-                @click="setListFilterPreset('tel112')"
-              >
-                Телефония 112
-              </el-button>
-              <el-button
-                :type="listFilterPreset === 'tel101' ? 'primary' : 'default'"
-                @click="setListFilterPreset('tel101')"
-              >
-                Телефония 101
-              </el-button>
-
             </div>
 
-            <div class="search-row">
-              <el-input
-                v-model="search"
-                placeholder="Поиск по всем полям карточки, включая ГК и примечание"
-                clearable
-                class="search-input"
-                title="Поиск по подстроке: ГК, раздел, комментарии, обсуждение, примечание, п.п. ТЗ/НМЦК, статус, система, приоритет, автор и редактор"
-              />
-
+            <div class="filters-row-compact">
+              <span class="filters-row-compact__label">
+                <svg
+                  class="filters-row-compact__icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <line x1="21" y1="6" x2="14" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  <line x1="10" y1="6" x2="3" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  <line x1="21" y1="12" x2="12" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  <line x1="8" y1="12" x2="3" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  <line x1="21" y1="18" x2="16" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  <line x1="12" y1="18" x2="3" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  <circle cx="12" cy="6" r="2" stroke="currentColor" stroke-width="2" />
+                  <circle cx="10" cy="12" r="2" stroke="currentColor" stroke-width="2" />
+                  <circle cx="14" cy="18" r="2" stroke="currentColor" stroke-width="2" />
+                </svg>
+                Фильтры:
+              </span>
               <el-select
                 v-model="status"
                 placeholder="Статус"
@@ -175,7 +256,7 @@
                 filterable
                 allow-create
                 default-first-option
-                class="status-select"
+                class="status-select filters-row-compact__select"
               >
                 <el-option
                   v-for="s in STANDARD_REQUIREMENT_STATUSES"
@@ -189,7 +270,7 @@
                 v-model="implementationQueue"
                 placeholder="Приоритет"
                 clearable
-                class="queue-select"
+                class="queue-select filters-row-compact__select"
               >
                 <el-option
                   v-for="queue in queues"
@@ -199,7 +280,11 @@
                 />
               </el-select>
 
-              <el-select v-model="archiveFilterMode" placeholder="Записи" class="archive-filter-select">
+              <el-select
+                v-model="archiveFilterMode"
+                placeholder="Записи"
+                class="archive-filter-select filters-row-compact__select"
+              >
                 <el-option label="Только активные" value="active" />
                 <el-option label="Активные и архив" value="all" />
                 <el-option label="Только архивные" value="archived_only" />
@@ -211,7 +296,7 @@
               </label>
 
               <label class="filter-no-fn-toggle">
-                <span class="filter-no-fn-toggle__label">Функция не указана</span>
+                <span class="filter-no-fn-toggle__label">Без функций</span>
                 <el-switch v-model="filterNoFunction" class="filter-no-fn-switch" />
               </label>
 
@@ -253,37 +338,6 @@
             </div>
           </div>
 
-          <div class="toolbar-right">
-            <el-button v-if="canEdit" type="primary" @click="createDialogVisible = true">
-              Добавить запись
-            </el-button>
-            <el-dropdown v-if="canEdit" trigger="click" @command="handleImportMenuCommand">
-              <el-button>
-                Ещё
-                <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item v-if="canEdit || canDeleteRequirements" command="toggle-selection">
-                    {{ selectionMode ? 'Завершить выделение' : 'Выделить' }}
-                  </el-dropdown-item>
-                  <el-dropdown-item command="import">Импорт предложений</el-dropdown-item>
-                  <el-dropdown-item command="template">Шаблон предложений (Excel)</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-            <el-button @click="handleExport">Экспорт Excel</el-button>
-            <el-tooltip :content="viewMode === 'table' ? 'Карточки' : 'Таблица'" placement="top">
-              <el-button class="view-toggle-btn" @click="toggleViewMode">
-                <span class="view-cubes-icon" aria-hidden="true">
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                </span>
-              </el-button>
-            </el-tooltip>
-          </div>
         </div>
         <div class="toolbar-footer-toggle">
           <el-button text size="small" @click="showToolbarPanel = false">
@@ -646,7 +700,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Close, MoreFilled } from '@element-plus/icons-vue'
+import { ArrowDown, Close, MoreFilled, Plus } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   type ArchiveRequirementReason,
@@ -759,6 +813,7 @@ const implementationQueue = ref('')
 
 const filterNoFunction = ref(false)
 const sequenceSortAsc = ref(false)
+const sectionsDropdownOpen = ref(false)
 
 
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -1055,11 +1110,11 @@ function exitSelectionMode() {
   tableRef.value?.clearSelection?.()
 }
 
-function toggleViewMode() {
+function setViewMode(mode: 'table' | 'cards') {
   if (selectionMode.value) {
     exitSelectionMode()
   }
-  viewMode.value = viewMode.value === 'table' ? 'cards' : 'table'
+  viewMode.value = mode
 }
 
 function handleCardClick(row: Requirement) {
@@ -1178,9 +1233,52 @@ function handleUserMenuCommand(cmd: string) {
     profileDrawerVisible.value = true
     return
   }
+  if (cmd === 'change-password') {
+    profileDrawerVisible.value = true
+    ElMessage.info('Смена пароля доступна в разделе профиля')
+    return
+  }
   if (cmd === 'logout') {
     handleLogout()
   }
+}
+
+function handleSectionsMenuCommand(cmd: string) {
+  if (cmd === 'gk-directory') {
+    router.push('/gk-directory')
+    return
+  }
+  if (cmd === 'functions-directory') {
+    router.push('/functions-directory')
+    return
+  }
+  if (cmd === 'admin-panel') {
+    router.push('/admin/users')
+  }
+}
+
+function handleSectionsDropdownVisibleChange(visible: boolean) {
+  sectionsDropdownOpen.value = visible
+}
+
+function handleHeaderToolsCommand(cmd: string) {
+  if (cmd === 'columns') {
+    ElMessage.info('Настройка столбцов будет доступна в следующем обновлении')
+    return
+  }
+  if (cmd === 'save-filters') {
+    ElMessage.success('Текущие фильтры сохранены локально в рамках сессии')
+    return
+  }
+  if (cmd === 'print') {
+    window.print()
+    return
+  }
+  if (cmd === 'history') {
+    ElMessage.info('Журнал изменений будет подключен после интеграции')
+    return
+  }
+  handleImportMenuCommand(cmd)
 }
 
 function handleImportMenuCommand(cmd: string) {
@@ -1435,7 +1533,7 @@ onBeforeUnmount(() => {
   width: 100%;
   overflow-x: hidden;
   background: linear-gradient(165deg, #e8eef6 0%, #f2f5f9 40%, #edf1f7 100%);
-  padding: 10px 15px 5px 15px;
+  padding: 0 0 4px 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -1463,10 +1561,127 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.page-header--dark {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 0;
+  padding: 6px 10px;
+  box-shadow: 0 4px 12px rgba(8, 20, 40, 0.2);
+}
+
 .page-header-left {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+.page-header-left--dark {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.brand-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: #f8fbff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.variant-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+}
+
+.variant-switch--right {
+  margin-left: 0;
+  margin-right: 12px;
+}
+
+.variant-switch__label {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1;
+  font-weight: 400;
+}
+
+.variant-switch__group {
+  display: inline-flex;
+  gap: 2px;
+  background: #1e293b;
+  border: 0;
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.variant-switch__option {
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: 6px;
+  padding: 7px 10px;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.variant-switch__option:hover {
+  color: #e2e8f0;
+}
+
+.variant-switch__option.is-active {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.variant-switch__option:nth-child(2).is-active {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.header-tools-btn {
+  --el-button-bg-color: rgba(255, 255, 255, 0.08);
+  --el-button-border-color: rgba(255, 255, 255, 0.18);
+  --el-button-text-color: #f3f8ff;
+  --el-button-hover-bg-color: rgba(255, 255, 255, 0.14);
+  --el-button-hover-border-color: rgba(255, 255, 255, 0.28);
+  --el-button-hover-text-color: #ffffff;
+}
+
+:deep(.header-tools-dropdown) {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 6px;
+}
+
+:deep(.header-tools-dropdown .el-dropdown-menu) {
+  padding: 0;
+}
+
+:deep(.header-tools-dropdown .el-dropdown-menu__item) {
+  border-radius: 8px;
+  margin: 1px 0;
+  font-size: 13px;
+  color: #334155;
+}
+
+:deep(.header-tools-dropdown .el-dropdown-menu__item:hover) {
+  background: #f8fafc;
+  color: #0f172a;
 }
 
 .page-title-row {
@@ -1521,6 +1736,36 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.header-actions--dark {
+  gap: 8px;
+}
+
+.sections-btn {
+  --el-button-bg-color: #2563eb;
+  --el-button-border-color: #2563eb;
+  --el-button-text-color: #ffffff;
+  --el-button-hover-bg-color: #1d4ed8;
+  --el-button-hover-border-color: #1d4ed8;
+  --el-button-hover-text-color: #ffffff;
+  --el-button-active-bg-color: #1e40af;
+  --el-button-active-border-color: #1e40af;
+  --el-button-outline-color: rgba(37, 99, 235, 0.3);
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  height: 32px;
+  padding: 0 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.16);
+}
+
+.sections-btn__arrow {
+  transition: transform 0.2s ease;
+}
+
+.sections-btn__arrow.is-open {
+  transform: rotate(180deg);
+}
+
 .header-before-avatar {
   display: flex;
   align-items: center;
@@ -1556,6 +1801,121 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
+}
+
+.registry-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0;
+  padding: 8px 12px;
+}
+
+.registry-topbar__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.registry-topbar__title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.35;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.registry-topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.registry-topbar__right :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.registry-topbar__search {
+  width: 240px;
+}
+
+.registry-topbar__search :deep(.el-input__wrapper) {
+  min-height: 36px;
+  border-radius: 8px;
+  background: #f8fafc;
+  box-shadow: 0 0 0 1px #e2e8f0 inset;
+}
+
+.registry-topbar__search :deep(.el-input__inner) {
+  font-size: 14px;
+  color: #334155;
+}
+
+.registry-topbar__search :deep(.el-input__inner::placeholder) {
+  color: #94a3b8;
+}
+
+.registry-topbar__search :deep(.el-input__wrapper.is-focus) {
+  box-shadow:
+    0 0 0 1px #60a5fa inset,
+    0 0 0 3px rgba(59, 130, 246, 0.18);
+}
+
+.registry-topbar__add-btn {
+  --el-button-bg-color: #2563eb;
+  --el-button-border-color: #2563eb;
+  --el-button-text-color: #ffffff;
+  --el-button-hover-bg-color: #1d4ed8;
+  --el-button-hover-border-color: #1d4ed8;
+  --el-button-active-bg-color: #1e40af;
+  --el-button-active-border-color: #1e40af;
+  min-height: 36px;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+.registry-topbar__add-btn :deep(.el-icon) {
+  margin-right: 4px;
+}
+
+.registry-topbar__export-btn {
+  --el-button-bg-color: #ffffff;
+  --el-button-border-color: #e2e8f0;
+  --el-button-text-color: #334155;
+  --el-button-hover-bg-color: #f8fafc;
+  --el-button-hover-border-color: #cbd5e1;
+  --el-button-active-bg-color: #f1f5f9;
+  --el-button-active-border-color: #cbd5e1;
+  min-height: 36px;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.registry-topbar__more-btn {
+  --el-button-bg-color: #ffffff;
+  --el-button-border-color: #e2e8f0;
+  --el-button-text-color: #475569;
+  --el-button-hover-bg-color: #f8fafc;
+  --el-button-hover-border-color: #cbd5e1;
+  width: 36px;
+  min-height: 36px;
+  border-radius: 8px;
+  padding: 0;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .toolbar-left {
@@ -1657,7 +2017,7 @@ onBeforeUnmount(() => {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border: 2px solid #c5d2e3;
+  border: 2px solid #5d7fb3;
   background: linear-gradient(145deg, #1e4d7b, #2d6a4f);
   color: #fff;
   font-size: 13px;
@@ -1756,17 +2116,31 @@ onBeforeUnmount(() => {
 
 .summary-card--main {
   width: 168px;
-  height: 56px;
+  height: 48px;
   cursor: default;
   margin-top: 0;
 }
 
+.summary-card--nav {
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.92);
+}
+
 .summary-card--main :deep(.el-card__body) {
   height: 100%;
-  padding: 8px 12px;
+  padding: 7px 10px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
+}
+
+.summary-card--main .summary-label {
+  font-size: 11px;
+}
+
+.summary-card--main .summary-value {
+  font-size: 18px;
 }
 
 .summary-popover-grid {
@@ -2272,11 +2646,40 @@ onBeforeUnmount(() => {
 }
 
 .main-filters {
-  display: flex;
+  display: none;
+}
+
+.header-filter-preset {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
   flex-wrap: wrap;
-  min-width: 0;
+  background: #1e293b;
+  border-radius: 8px;
+  padding: 2px;
+  margin-left: 8px;
+}
+
+.header-filter-preset__btn {
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.header-filter-preset__btn:hover {
+  color: #e2e8f0;
+}
+
+.header-filter-preset__btn.is-active {
+  background: #2563eb;
+  color: #ffffff;
 }
 
 .list-sort-switch--toolbar {
@@ -2289,6 +2692,53 @@ onBeforeUnmount(() => {
   gap: 8px;
   flex-wrap: nowrap;
   min-width: 0;
+}
+
+.filters-row-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.filters-row-compact__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+  padding-right: 2px;
+}
+
+.filters-row-compact__icon {
+  width: 14px;
+  height: 14px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.filters-row-compact__select {
+  width: 150px;
+  flex: 0 0 150px;
+}
+
+.filters-row-compact__select :deep(.el-select__wrapper) {
+  min-height: 32px;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px #e2e8f0 inset;
+}
+
+.filters-row-compact__select :deep(.el-select__placeholder) {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.filters-row-compact__select :deep(.el-select__selected-item) {
+  font-size: 13px;
+  color: #334155;
 }
 
 .selection-actions-row {
@@ -2389,7 +2839,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 900px) {
   .page {
-    padding: 12px;
+    padding: 0 0 4px 0;
   }
 
   .page-header {
