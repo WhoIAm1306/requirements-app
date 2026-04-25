@@ -1,93 +1,242 @@
-# AGENT.md — проект «Учёт предложений»
+# AGENT.md — оперативная карта проекта requirements-app
 
-Краткое описание для ИИ-агентов и разработчиков: назначение репозитория, стек, структура каталогов и ответственность файлов.
+Этот файл нужен как рабочий навигатор для ИИ-агента и разработчика: куда идти в коде, где точка входа для каждой задачи, какие ограничения по правам и где легко сломать поведение.
 
-## Назначение
+## 1) Что это за система
 
-Внутреннее веб-приложение для учёта предложений (требований): карточки с полями ГК, очереди, статусы, комментарии, архив, импорт/экспорт Excel, справочник государственных контрактов (ГК) с этапами и функциями ТЗ, вложения к предложениям с общей «библиотекой» файлов для повторного прикрепления. Роли: чтение / редактирование / суперпользователь (админ-пользователи, массовое удаление).
+Внутреннее веб-приложение для учета предложений (requirements):
+- карточки предложений с полями, статусами, очередями и архивом;
+- комментарии и вложения (включая библиотеку файлов для повторного прикрепления);
+- справочник государственных контрактов (ГК): контракты, этапы, функции ТЗ, вложения;
+- импорт/экспорт Excel;
+- управление пользователями и granular grants.
 
-## Стек
+Роли:
+- `read` — базовое чтение, плюс точечные grants;
+- `edit` — редактирование доменных сущностей;
+- `isSuperuser=true` — админ-функции и обход большинства ограничений.
 
-| Слой     | Технологии |
-|----------|------------|
-| Backend  | Go 1.22+, Gin, GORM, PostgreSQL, JWT (bcrypt для паролей) |
-| Frontend | Vue 3, TypeScript, Vite, Pinia, Vue Router, Element Plus, axios, xlsx |
-| Deploy   | Docker (мультистейдж: сборка фронта + Go-бинарник), см. `Dockerfile`, `DEPLOY.md` |
+## 2) Быстрый старт (5 минут)
 
-## Корень репозитория
-
-| Путь | Роль |
-|------|------|
-| `Dockerfile` | Сборка образа: `frontend` → `dist`, Go `cmd/app` → бинарник, статика в `frontend-dist` |
-| `docker-compose.yml` | Локальный запуск приложения + Postgres |
-| `deploy.env.example` | Пример переменных для продакшена |
-| `DEPLOY.md` | Инструкции по развёртыванию |
-| `.gitignore` | Игнор: `.env`, `node_modules`, `dist`, локальные `uploads` под `backend/cmd/app/uploads/` |
-
-## Backend (`backend/`)
-
-| Путь | Роль |
-|------|------|
-| `cmd/app/main.go` | Точка входа HTTP: CORS, группы маршрутов `read` / `edit` / `admin`, раздача `frontend-dist`, health |
-| `cmd/purge/main.go` | Утилита полной очистки данных БД (кроме `users`) и каталогов вложений |
-| `internal/config/config.go` | Загрузка `.env`, структура `Config` |
-| `internal/db/postgres.go` | Подключение PostgreSQL, `AutoMigrate`, сиды очередей и суперпользователя |
-| `internal/models/models.go` | GORM-сущности: `Requirement`, `Comment`, справочники ГК, вложения, пользователи, библиотека файлов предложений |
-| `internal/security/jwt.go` | Подпись и валидация JWT |
-| `internal/middleware/auth_middleware.go` | `RequireAuth`, `RequireEditOrSuperuser`, `RequireSuperuser` |
-| `internal/handlers/auth_handler.go` | Логин, смена пароля, `/auth/me` |
-| `internal/handlers/user_handler.go` | CRUD пользователей (админ) |
-| `internal/handlers/requirement_handler.go` | CRUD предложений, список, фильтры, комментарии, архив, импорт/экспорт, привязка к ГК |
-| `internal/handlers/requirement_attachment_handler.go` | Вложения предложений: загрузка, библиотека, скачивание, открепление |
-| `internal/handlers/dictionary_handler.go` | Авторы, пункты ТЗ, очереди, список/поиск ГК (legacy-справочник имён) |
-| `internal/handlers/contract_directory_handler.go` | Полный CRUD справочника ГК: этапы, функции ТЗ, Excel-импорт, вложения ГК |
-
-Файлы на диске: `uploads/contracts/...`, `uploads/requirements/library/...` (относительно рабочей директории процесса).
-
-## Frontend (`frontend/src/`)
-
-| Путь | Роль |
-|------|------|
-| `main.ts` | Создание приложения, плагины, импорт стилей Element Plus + `styles/app-theme.css` |
-| `App.vue` | Корневой `<router-view />` |
-| `router/index.ts` | Маршруты, ленивые импорты страниц, guard по токену и `isSuperuser` |
-| `stores/auth.ts` | Сессия: токен, профиль, вычисляемые `accessLevel`, `isSuperuser` |
-| `api/client.ts` | Axios: `baseURL`, Bearer, обработка 401 |
-| `api/auth.ts` | Логин и смена пароля |
-| `api/requirements.ts` | Все запросы по предложениям, экспорт Excel, вложения, библиотека файлов |
-| `api/contracts.ts`, `api/gkContracts.ts` | Справочник ГК и операции с этапами/функциями/вложениями |
-| `api/queues.ts`, `api/adminUsers.ts`, `api/imports.ts` | Очереди, админ-пользователи, импорты Excel |
-| `types/index.ts` | Общие TypeScript-типы DTO |
-| `constants/` | Статусы, типы систем, инициатор по системе |
-| `utils/excelTemplates.ts` | Шаблоны Excel для скачивания |
-| `utils/debounce.ts` | Утилита debounce (например, resize) |
-| `styles/app-theme.css` | Корпоративные цвета, кнопки, переключатели, таблицы |
-| `pages/LoginPage.vue` | Вход |
-| `pages/RequirementsPage.vue` | Главная: таблица, фильтры, действия, диалоги |
-| `pages/GKDirectoryPage.vue` | Справочник ГК |
-| `pages/AdminUsersPage.vue` | Управление пользователями |
-| `components/RequirementDetailsDrawer.vue` | Карточка предложения, вложения, комментарии |
-| `components/RequirementFormDialog.vue` | Создание/редактирование в диалоге |
-| `components/ImportExcelDialog.vue`, `ProfileDrawer.vue`, `AdminUserDialog.vue` | Импорт, профиль, пользователь |
-| Остальные `components/*` | Диалоги и теги для ГК и статусов |
-
-Сборка: `frontend/npm run build` → `dist/`. Переменная `VITE_API_BASE_URL` (см. `.env.production.example`) задаёт префикс API.
-
-## Команды
+Локально:
 
 ```bash
-# Backend (из backend/)
+# backend
+cd backend
 go run ./cmd/app
 
-# Frontend dev (из frontend/)
+# frontend (в отдельном терминале)
+cd frontend
+npm install
 npm run dev
-
-# Purge БД (из backend/, осторожно)
-go run ./cmd/purge
 ```
 
-## Соглашения для правок
+Docker:
 
-- Не коммитить секреты и локальные `uploads` под `backend/cmd/app/uploads/`.
-- Новые API — симметрично типы в `types/index.ts` и функции в `api/*.ts`.
-- Маршруты бэкенда: публичные/чтение/редактирование/админ — по образцу `cmd/app/main.go`.
+```bash
+docker compose up -d --build
+```
+
+Проверка живости:
+- `GET /api/health` в `backend/cmd/app/main.go`.
+
+Ключевые env и конфиг:
+- backend env читается в `backend/internal/config/config.go`;
+- пример: `backend/.env.example`;
+- deploy env: `deploy.env.example`.
+
+## 3) Карта репозитория
+
+Корень:
+- `Dockerfile` — multi-stage сборка frontend + backend, рантайм с `frontend-dist`;
+- `docker-compose.yml` — app + postgres + volume для загрузок;
+- `DEPLOY.md` — сценарии развёртывания и обслуживания;
+- `infra/docker-compose.yml` — минимальный postgres для локальных сценариев.
+
+Backend:
+- `backend/cmd/app/main.go` — главный роутер, CORS, auth groups, SPA fallback;
+- `backend/internal/db/postgres.go` — подключение, `AutoMigrate`, начальные данные;
+- `backend/internal/models/models.go` — все GORM-сущности и связи;
+- `backend/internal/handlers/*` — бизнес-логика API;
+- `backend/internal/middleware/*` — auth/RBAC/grants;
+- `backend/cmd/purge/main.go` — destructive очистка данных и uploads (использовать очень осторожно).
+
+Frontend:
+- `frontend/src/main.ts` — инициализация Vue/Pinia/Router/ElementPlus;
+- `frontend/src/router/index.ts` — маршруты и guard;
+- `frontend/src/stores/auth.ts` — профиль, capability-флаги, grants;
+- `frontend/src/api/*.ts` — слой HTTP-клиента;
+- `frontend/src/pages/*` — главные экраны;
+- `frontend/src/components/*` — диалоги и составные элементы.
+
+Docs:
+- `docs/ADMIN_USERS_IMPORT_EXPORT_HINTS.md` — нюансы импорта/экспорта пользователей и грантов.
+- `docs/SPISOK_UI_REFERENCE.md` — карта UI-референса `spisok` (какие компоненты и какие паттерны брать для верстки списка).
+
+## 4) Архитектура по потокам (куда идти при задаче)
+
+### 4.1 Логин и сессия
+- UI: `frontend/src/pages/LoginPage.vue`
+- API client: `frontend/src/api/auth.ts`
+- Backend: `backend/internal/handlers/auth_handler.go`
+- Route wiring: `backend/cmd/app/main.go` (`POST /api/auth/login`)
+- Состояние сессии: `frontend/src/stores/auth.ts` + `localStorage`.
+
+### 4.2 Список и карточка requirement
+- Экран списка: `frontend/src/pages/RequirementsPage.vue`
+- Детали и частичное редактирование: `frontend/src/components/RequirementDetailsDrawer.vue`
+- API: `frontend/src/api/requirements.ts`
+- Backend handler: `backend/internal/handlers/requirement_handler.go`
+- Права и merge разрешенных полей:  
+  - `backend/internal/middleware/requirement_grants.go`  
+  - `backend/internal/handlers/requirement_grant_merge.go`
+
+### 4.3 Комментарии requirement
+- UI блок: `RequirementDetailsDrawer.vue`
+- Middleware: `backend/internal/middleware/requirement_comment.go`
+- Routes: `POST/DELETE /api/requirements/:id/comments...` в `backend/cmd/app/main.go`.
+
+### 4.4 Вложения requirement и библиотека
+- Backend logic: `backend/internal/handlers/requirement_attachment_handler.go`
+- Основные endpoints подключены в `backend/cmd/app/main.go`
+- Физическое хранение: `./uploads/requirements/library/...`.
+
+### 4.5 Справочник ГК
+- Экран: `frontend/src/pages/GKDirectoryPage.vue`
+- API: `frontend/src/api/gkContracts.ts`, `frontend/src/api/contracts.ts`
+- Backend: `backend/internal/handlers/contract_directory_handler.go`
+- Права GK: `backend/internal/middleware/gk_directory_grants.go`.
+
+### 4.6 Админ-пользователи
+- Экран: `frontend/src/pages/AdminUsersPage.vue`
+- Диалог: `frontend/src/components/AdminUserDialog.vue`
+- API: `frontend/src/api/adminUsers.ts`
+- Backend: `backend/internal/handlers/user_handler.go`
+- Routes: `/api/admin/users*` в `backend/cmd/app/main.go`.
+
+## 5) Индекс API-групп (как читать роутинг)
+
+Опорный файл: `backend/cmd/app/main.go`.
+
+- `public`:
+  - `POST /api/auth/login`
+
+- `read` (`RequireAuth`):
+  - чтение requirements/справочников/ГК;
+  - некоторые mutation-операции под granular middleware (comments, attachments, partial PUT, GK edit grants).
+
+- `edit` (`RequireAuth + RequireEditOrSuperuser`):
+  - создание requirement, архив/restore;
+  - создание очереди;
+  - импорт requirements и TZ points.
+
+- `admin` (`/api/admin` + `RequireSuperuser`):
+  - CRUD/import/export users;
+  - массовое удаление требований.
+
+Важно: часть write-операций intentionally находится в `read`-группе, но дополнительно закрыта специфичными middleware по grants.
+
+## 6) RBAC и grants (критично для любых правок)
+
+Базовые проверки:
+- `backend/internal/middleware/auth_middleware.go`
+
+Requirement field grants:
+- источник: `users.requirement_field_grants` (JSON);
+- проверка и допуск к `PUT`: `backend/internal/middleware/requirement_grants.go`;
+- защитный merge разрешенных полей: `backend/internal/handlers/requirement_grant_merge.go`.
+
+Тонкости:
+- grant `comment` отдельно от общего `PUT` карточки;
+- для `PUT` у `read`-пользователя нужен хотя бы один grant, отличный от `comment`;
+- удаление requirement: `edit` + grant `deleteRequirement` (или superuser);
+- вложения requirement: grant `attachments` (или edit/superuser).
+
+GK directory grants:
+- источник: `users.gk_directory_grants` (JSON);
+- ключи: `gkContractEdit`, `gkStageEdit`, `gkFunctionEdit`;
+- проверка: `backend/internal/middleware/gk_directory_grants.go`;
+- для несуперпользователя нужен `accessLevel=edit`.
+
+Frontend capability-флаги:
+- `frontend/src/stores/auth.ts`
+
+Правило синхронизации: ключи grants должны совпадать между backend и frontend 1:1.
+
+## 7) Данные и хранение
+
+Опорный файл: `backend/internal/models/models.go`.
+
+Ключевые сущности:
+- `Requirement`, `Comment`;
+- `RequirementAttachmentLibrary`, `RequirementAttachment`;
+- `ContractDictionary`, `ContractStage`, `ContractTZFunction`, `ContractAttachment`;
+- `QueueDictionary`, `TZPoint`, `AuthorDictionary`;
+- `User` (включая JSON grants).
+
+Где что хранится:
+- PostgreSQL: доменные сущности, связи, grants, метаданные файлов;
+- файловая система: бинарные вложения в `./uploads/contracts/...` и `./uploads/requirements/library/...`.
+
+## 8) Operational Safety (что не ломать)
+
+Перед любой правкой проверять:
+- grants-ключи и их соответствие в `stores/auth.ts` + backend middleware/merge;
+- целостность ссылок requirement <-> GK functions при удалениях в справочнике ГК;
+- логику генерации/обновления `taskIdentifier` в `requirement_handler.go`;
+- поведение upload/download/delete для файлов (зависимость от рабочей директории и volume);
+- что route реально существует на backend, если используется на frontend API.
+
+## 9) Playbooks изменений (чеклисты)
+
+### Добавить поле в requirement
+1. Обновить `backend/internal/models/models.go` (+ миграции через `AutoMigrate`).
+2. Обновить DTO/валидацию в `backend/internal/handlers/requirement_handler.go`.
+3. Обновить merge по grants в `backend/internal/handlers/requirement_grant_merge.go` (если поле редактируемое).
+4. Добавить/обновить grant-ключи:
+   - backend: `middleware/requirement_grants.go`
+   - frontend: `frontend/src/constants/requirementFieldGrants.ts`, `stores/auth.ts`.
+5. Обновить UI формы/детали/таблицу и `frontend/src/types/index.ts`.
+
+### Добавить новый grant
+1. Определить источник (`requirement_field_grants` или `gk_directory_grants`).
+2. Реализовать backend check middleware.
+3. Добавить frontend capability и отображение в админ-форме пользователя.
+4. Проверить импорт/экспорт users (`user_handler.go` + `docs/ADMIN_USERS_IMPORT_EXPORT_HINTS.md`).
+
+### Добавить endpoint
+1. Реализовать handler.
+2. Подключить route в `backend/cmd/app/main.go` в правильную группу (`public/read/edit/admin`).
+3. Если endpoint write-sensitive, добавить middleware grants.
+4. Добавить frontend API-функцию и типы.
+
+### Изменить импорт/экспорт Excel
+1. Backend parsing/headers: `requirement_handler.go` или `user_handler.go` / `contract_directory_handler.go`.
+2. Frontend загрузка/скачивание: `frontend/src/api/imports.ts` и соответствующие dialog-компоненты.
+3. Обновить пользовательские подсказки в `docs/`.
+
+## 10) Мини-чеклист перед завершением задачи
+
+- Backend компилируется (`go run ./cmd/app` или `go test ./...` при необходимости).
+- Frontend собирается (`npm run build`) или минимум не содержит TypeScript-ошибок в измененных местах.
+- RBAC smoke-тест:
+  - `read` без grants,
+  - `read` с точечным grant,
+  - `edit`,
+  - `superuser`.
+- Не утекли секреты/локальные uploads в git.
+
+## 11) UI референс spisok (для нового чата)
+
+Если задача про "сделать как в Figma/spisok", использовать:
+- опорный документ: `docs/SPISOK_UI_REFERENCE.md`;
+- источник референса: `C:/Users/D.Zinovev/Desktop/spisok`.
+
+Порядок переноса в `RequirementsPage.vue`:
+1. `HeaderToolbar` (поиск/добавить/экспорт);
+2. `FilterBar` (ряд фильтров);
+3. `ColumnHeaders` + grid;
+4. `RequirementRowCard` (строка-как-компонент);
+5. `BulkActionsBar` и `PaginationBar`.
+
+Важно: переносить только верстку/UX-паттерны, а данные и действия оставлять из текущего `requirements-app`.

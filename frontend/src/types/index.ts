@@ -116,8 +116,43 @@ export interface GKFunction {
   nmckFunctionNumber: string
   tzSectionNumber: string
   jiraLink?: string
+  confluenceLinks?: string[]
+  jiraEpicLinks?: string[]
   createdAt: string
   updatedAt: string
+}
+
+export type JiraEpicSyncStatus = 'unknown' | 'planned' | 'synced' | 'error'
+
+export interface JiraEpicStatusItem {
+  link: string
+  epicKey?: string
+  summary?: string
+  status?: string
+  statusCategory?: string
+  syncStatus: JiraEpicSyncStatus
+  error?: string
+}
+
+export interface JiraEpicStatusesFunctionItem {
+  functionId: number
+  epics: JiraEpicStatusItem[]
+}
+
+export interface GKFunctionCardView {
+  id: number
+  contractId: number
+  contractStageId: number
+  functionName: string
+  nmckFunctionNumber: string
+  tzSectionNumber: string
+  confluenceLinks: string[]
+  jiraEpicLinks: string[]
+  linksCount: number
+  jiraEpicCount: number
+  confluenceCount: number
+  jiraEpicSyncStatus: JiraEpicSyncStatus
+  jiraEpicStatuses: JiraEpicStatusItem[]
 }
 
 // Детали ГК вместе с этапами и функциями.
@@ -157,6 +192,8 @@ export interface UpsertGKFunctionPayload {
   nmckFunctionNumber: string
   tzSectionNumber: string
   jiraLink?: string
+  confluenceLinks?: string[]
+  jiraEpicLinks?: string[]
 }
 
 export interface ContractAttachmentItem {
@@ -231,6 +268,7 @@ export interface Requirement {
   lastEditedOrg: string
   isArchived: boolean
   archivedAt?: string | null
+  archivedReason?: 'completed' | 'outdated' | string
   archivedBy?: string
   archivedByOrg?: string
   comments?: CommentItem[]

@@ -37,7 +37,7 @@ func main() {
 	userHandler := handlers.NewUserHandler(database)
 	requirementHandler := handlers.NewRequirementHandler(database)
 	dictionaryHandler := handlers.NewDictionaryHandler(database)
-	contractDirectoryHandler := handlers.NewContractDirectoryHandler(database)
+	contractDirectoryHandler := handlers.NewContractDirectoryHandler(database, cfg)
 
 	// Создаём gin router.
 	r := gin.Default()
@@ -93,6 +93,9 @@ func main() {
 		read.GET("/contracts/:id", contractDirectoryHandler.GetContractDetails)
 		read.GET("/contracts/:id/stages", contractDirectoryHandler.ListStages)
 		read.GET("/contracts/:id/stages/:stageNumber/functions", contractDirectoryHandler.ListFunctionsForStage)
+		read.GET("/contracts/:id/stages/:stageNumber/functions/jira-epic-statuses", contractDirectoryHandler.GetJiraEpicStatusesForStageFunctions)
+		read.POST("/contracts/jira-epic-status-preview", contractDirectoryHandler.PreviewJiraEpicStatuses)
+		read.GET("/contracts/:id/functions/:functionId/requirements", contractDirectoryHandler.ListFunctionRequirements)
 		read.GET("/contracts/:id/attachments", contractDirectoryHandler.ListContractAttachments)
 		read.GET("/contracts/attachments/:attachmentId/download", contractDirectoryHandler.DownloadContractAttachment)
 		read.GET("/queues", dictionaryHandler.ListQueues)
@@ -101,7 +104,10 @@ func main() {
 		read.POST("/contracts", middleware.RequireGKContractEditOrSuperuser(), contractDirectoryHandler.CreateContract)
 		read.PUT("/contracts/:id", middleware.RequireGKContractEditOrSuperuser(), contractDirectoryHandler.UpdateContract)
 		read.POST("/contracts/:id/stages", middleware.RequireGKStageEditOrSuperuser(), contractDirectoryHandler.CreateStage)
+		read.PUT("/contracts/:id/stages/:stageNumber", middleware.RequireGKStageEditOrSuperuser(), contractDirectoryHandler.UpdateStage)
 		read.POST("/contracts/:id/functions", middleware.RequireGKFunctionEditOrSuperuser(), contractDirectoryHandler.UpsertTZFunction)
+		read.POST("/contracts/:id/functions/:functionId/requirements/bind", middleware.RequireGKFunctionEditOrSuperuser(), contractDirectoryHandler.BindRequirementsToFunction)
+		read.POST("/contracts/:id/functions/:functionId/requirements/unbind", middleware.RequireGKFunctionEditOrSuperuser(), contractDirectoryHandler.UnbindRequirementsFromFunction)
 		read.POST("/contracts/:id/attachments", middleware.RequireGKFunctionEditOrSuperuser(), contractDirectoryHandler.UploadContractAttachments)
 		read.POST("/import/gk-tz-functions", middleware.RequireGKFunctionEditOrSuperuser(), contractDirectoryHandler.ImportTZFunctionsFromExcel)
 
@@ -133,6 +139,7 @@ func main() {
 		edit.POST("/requirements", requirementHandler.Create)
 		edit.POST("/requirements/:id/archive", requirementHandler.Archive)
 		edit.POST("/requirements/:id/restore", requirementHandler.Restore)
+		edit.POST("/requirements/:id/unlink-gk", requirementHandler.UnlinkGK)
 
 		edit.POST("/queues", dictionaryHandler.CreateQueue)
 

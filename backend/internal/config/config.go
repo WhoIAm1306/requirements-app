@@ -4,6 +4,7 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -32,11 +33,17 @@ type Config struct {
 	SuperuserOrganization string
 	SuperuserEmail        string
 	SuperuserPassword     string
+
+	// Настройки интеграции с Jira.
+	JiraBaseURL     string
+	JiraBearerToken string
+	JiraUserEmail   string
+	JiraAPIToken    string
 }
 
 // Load читает .env и собирает итоговую конфигурацию.
 func Load() *Config {
-	_ = godotenv.Load()
+	_ = godotenv.Load("../.env", ".env")
 
 	cfg := &Config{
 		AppPort: getEnv("PORT", getEnv("APP_PORT", "8080")),
@@ -55,6 +62,10 @@ func Load() *Config {
 		SuperuserOrganization: getEnv("SUPERUSER_ORGANIZATION", "Танто-С"),
 		SuperuserEmail:        getEnv("SUPERUSER_EMAIL", "admin@example.com"),
 		SuperuserPassword:     getEnv("SUPERUSER_PASSWORD", "Admin123456"),
+		JiraBaseURL:           strings.TrimRight(getEnv("JIRA_BASE_URL", "https://jira.avilex.ru"), "/"),
+		JiraBearerToken:       getEnv("JIRA_BEARER_TOKEN", ""),
+		JiraUserEmail:         getEnv("JIRA_USER_EMAIL", ""),
+		JiraAPIToken:          getEnv("JIRA_API_TOKEN", ""),
 	}
 
 	log.Println("config loaded")

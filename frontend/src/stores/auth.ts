@@ -4,6 +4,13 @@ import type { LoginResponse, UserProfile } from '@/types'
 
 // Pinia-store с JWT и профилем пользователя.
 export const useAuthStore = defineStore('auth', () => {
+  function normalizeOrg(value: string) {
+    return (value || '')
+      .toLowerCase()
+      .replace(/ё/g, 'е')
+      .replace(/[^a-zа-я0-9]/gi, '')
+  }
+
   // Токен живёт в localStorage, чтобы сессия переживала перезагрузку страницы.
   const token = ref(localStorage.getItem('accessToken') || '')
 
@@ -17,6 +24,9 @@ export const useAuthStore = defineStore('auth', () => {
   const email = computed(() => profile.value?.email || '')
   const isSuperuser = computed(() => Boolean(profile.value?.isSuperuser))
   const accessLevel = computed(() => profile.value?.accessLevel || 'read')
+  const isTantoSOrganization = computed(() => normalizeOrg(profile.value?.organization || '').includes('тантос'))
+  const canAccessFunctionsDirectory = computed(() => isTantoSOrganization.value)
+  const canAccessExternalLinks = computed(() => isTantoSOrganization.value)
   /** Добавление комментариев: edit/superuser или грант при read. */
   const canCommentRequirements = computed(
     () =>
@@ -112,6 +122,9 @@ export const useAuthStore = defineStore('auth', () => {
     email,
     accessLevel,
     isSuperuser,
+    isTantoSOrganization,
+    canAccessFunctionsDirectory,
+    canAccessExternalLinks,
     canCommentRequirements,
     canEditRequirementsFully,
     hasPartialRequirementFieldEdit,

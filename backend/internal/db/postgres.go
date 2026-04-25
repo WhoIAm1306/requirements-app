@@ -72,6 +72,14 @@ func NewPostgres(cfg *config.Config) (*gorm.DB, error) {
 	`); res.Error != nil {
 		return nil, res.Error
 	}
+	// Миграция данных статусов: старый статус «В обработку» -> «Новое».
+	if res := database.Exec(`
+		UPDATE requirements
+		SET status_text = 'Новое'
+		WHERE LOWER(TRIM(COALESCE(status_text, ''))) = 'в обработку'
+	`); res.Error != nil {
+		return nil, res.Error
+	}
 	_ = database.Exec(`UPDATE users SET requirement_field_grants = '{}'::jsonb WHERE requirement_field_grants IS NULL`)
 	_ = database.Exec(`UPDATE users SET gk_directory_grants = '{}'::jsonb WHERE gk_directory_grants IS NULL`)
 	// Миграция порядкового номера: для старых записей, где номер ещё не выставлен.
@@ -107,20 +115,13 @@ func seedDefaultQueues(db *gorm.DB) error {
 	return nil
 }
 
-// seedSuperuser создаёт стартового суперпользователя.
+// seedSuperuser синхронизирует стартового суперпользователя по .env.
+// Если пользователь с email из .env не найден, используем первого найденного superuser
+// (переименовываем его под текущие env-данные), иначе создаём нового.
 func seedSuperuser(db *gorm.DB, cfg *config.Config) error {
 	email := strings.TrimSpace(strings.ToLower(cfg.SuperuserEmail))
 	if email == "" {
 		return nil
-	}
-
-	var existing models.User
-	err := db.Where("LOWER(email) = ?", email).First(&existing).Error
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
 	}
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(cfg.SuperuserPassword), bcrypt.DefaultCost)
@@ -128,15 +129,39 @@ func seedSuperuser(db *gorm.DB, cfg *config.Config) error {
 		return err
 	}
 
-	user := models.User{
-		FullName:     cfg.SuperuserFullName,
-		Organization: cfg.SuperuserOrganization,
-		Email:        email,
-		PasswordHash: string(passwordHash),
-		AccessLevel:  "edit",
-		IsSuperuser:  true,
-		IsActive:     true,
+	var target models.User
+	err = db.Where("LOWER(email) = ?", email).First(&target).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
 	}
 
-	return db.Create(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = db.Where("is_superuser = ?", true).Order("id asc").First(&target).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+	}
+
+	if target.ID == 0 {
+		user := models.User{
+			FullName:     cfg.SuperuserFullName,
+			Organization: cfg.SuperuserOrganization,
+			Email:        email,
+			PasswordHash: string(passwordHash),
+			AccessLevel:  "edit",
+			IsSuperuser:  true,
+			IsActive:     true,
+		}
+		return db.Create(&user).Error
+	}
+
+	target.FullName = cfg.SuperuserFullName
+	target.Organization = cfg.SuperuserOrganization
+	target.Email = email
+	target.PasswordHash = string(passwordHash)
+	target.AccessLevel = "edit"
+	target.IsSuperuser = true
+	target.IsActive = true
+
+	return db.Save(&target).Error
 }

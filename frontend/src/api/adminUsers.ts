@@ -32,14 +32,6 @@ export async function deleteAdminUser(id: number) {
   return data
 }
 
-// Смена пароля выбранного пользователя администратором.
-export async function changeAdminUserPassword(id: number, newPassword: string) {
-  const { data } = await apiClient.post<{ message: string }>(`/admin/users/${id}/change-password`, {
-    newPassword,
-  })
-  return data
-}
-
 // Экспорт таблицы пользователей и прав.
 export async function exportAdminUsersFile() {
   const { data } = await apiClient.get<Blob>('/admin/users/export', { responseType: 'blob' })
