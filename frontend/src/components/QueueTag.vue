@@ -27,36 +27,35 @@ const queueClass = computed(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 15px;
+  min-height: 20px;
   padding: 4px 10px;
-  border-radius: 5px;
-  font-size: 12px;
-  font-weight: 600;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
   line-height: 1;
-  border: 1px solid transparent;
+  border: 0;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: none;
 }
 
 .queue-1 {
   background: #f9dfe8;
   color: #8a4b5f;
-  border-color: #f2c6d4;
 }
 
 .queue-2 {
   background: #fff4cc;
-  color: #8a6d1f;
-  border-color: #f3e3a2;
+  color: #7e6220;
 }
 
 .queue-3 {
   background: #dff5df;
-  color: #3f7a45;
-  border-color: #c5e7c7;
+  color: #2f6d37;
 }
 
 .queue-default {
   background: #eef2f7;
   color: #556070;
-  border-color: #dde3eb;
 }
 </style>

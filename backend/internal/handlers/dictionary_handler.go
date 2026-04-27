@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"requirements-app/backend/internal/models"
 
@@ -284,16 +285,85 @@ func (h *DictionaryHandler) SearchContracts(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+// contractListRow — элемент списка ГК с агрегатами для UI (сайдбар).
+type contractListRow struct {
+	ID                   uint      `json:"id"`
+	Name                 string    `json:"name"`
+	ShortName            string    `json:"shortName"`
+	UseShortNameInTaskID bool      `json:"useShortNameInTaskId"`
+	Description          string    `json:"description"`
+	IsActive             bool      `json:"isActive"`
+	CreatedAt            time.Time `json:"createdAt"`
+	StagesCount          int64     `json:"stagesCount"`
+	FunctionsCount       int64     `json:"functionsCount"`
+}
+
 func (h *DictionaryHandler) ListContracts(c *gin.Context) {
 	var items []models.ContractDictionary
-
-	if err := h.db.
-		Where("is_active = ?", true).
-		Order("name asc").
-		Find(&items).Error; err != nil {
+	if err := h.db.Order("name asc").Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения ГК"})
 		return
 	}
 
-	c.JSON(http.StatusOK, items)
+	if len(items) == 0 {
+		c.JSON(http.StatusOK, []contractListRow{})
+		return
+	}
+
+	ids := make([]uint, len(items))
+	for i := range items {
+		ids[i] = items[i].ID
+	}
+
+	stageMap := make(map[uint]int64, len(ids))
+	var stageAgg []struct {
+		ContractID uint  `gorm:"column:contract_id"`
+		N          int64 `gorm:"column:n"`
+	}
+	if err := h.db.Model(&models.ContractStage{}).
+		Select("contract_id, COUNT(*)::bigint AS n").
+		Where("contract_id IN ?", ids).
+		Group("contract_id").
+		Find(&stageAgg).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения этапов ГК"})
+		return
+	}
+	for _, r := range stageAgg {
+		stageMap[r.ContractID] = r.N
+	}
+
+	fnMap := make(map[uint]int64, len(ids))
+	var fnAgg []struct {
+		ContractID uint  `gorm:"column:contract_id"`
+		N          int64 `gorm:"column:n"`
+	}
+	if err := h.db.Table("contract_tz_functions AS f").
+		Select("s.contract_id, COUNT(*)::bigint AS n").
+		Joins("INNER JOIN contract_stages AS s ON s.id = f.contract_stage_id").
+		Where("s.contract_id IN ?", ids).
+		Group("s.contract_id").
+		Find(&fnAgg).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения функций ГК"})
+		return
+	}
+	for _, r := range fnAgg {
+		fnMap[r.ContractID] = r.N
+	}
+
+	out := make([]contractListRow, 0, len(items))
+	for _, c := range items {
+		out = append(out, contractListRow{
+			ID:                   c.ID,
+			Name:                 c.Name,
+			ShortName:            c.ShortName,
+			UseShortNameInTaskID: c.UseShortNameInTaskID,
+			Description:          c.Description,
+			IsActive:             c.IsActive,
+			CreatedAt:            c.CreatedAt,
+			StagesCount:          stageMap[c.ID],
+			FunctionsCount:       fnMap[c.ID],
+		})
+	}
+
+	c.JSON(http.StatusOK, out)
 }

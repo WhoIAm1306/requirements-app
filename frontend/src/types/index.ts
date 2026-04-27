@@ -94,6 +94,9 @@ export interface ContractItem {
   description?: string
   isActive: boolean
   createdAt: string
+  /** Агрегаты из GET /contracts (для сайдбара). */
+  stagesCount?: number
+  functionsCount?: number
 }
 
 // Этапы ГК.
@@ -179,6 +182,8 @@ export interface UpdateGKContractPayload {
   shortName?: string
   useShortNameInTaskId?: boolean
   description: string
+  /** Смена активности ГК (архив / восстановление). */
+  isActive?: boolean
 }
 
 export interface CreateGKStagePayload {

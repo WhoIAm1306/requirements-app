@@ -99,7 +99,12 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          <el-dropdown trigger="click" placement="bottom-end" @command="handleUserMenuCommand">
+          <div class="header-user-meta">
+            <div class="header-user-meta__text">
+              <span class="header-user-meta__name">{{ authStore.fullName || '—' }}</span>
+              <span class="header-user-meta__org">{{ authStore.organization || '—' }}</span>
+            </div>
+            <el-dropdown trigger="click" placement="bottom-end" @command="handleUserMenuCommand">
             <button type="button" class="user-avatar-btn" :title="authStore.fullName">
               {{ userAvatarLetters }}
             </button>
@@ -111,6 +116,7 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
+          </div>
         </div>
       </div>
 
@@ -189,7 +195,7 @@
         <div class="registry-topbar__right">
           <el-input
             v-model="search"
-            placeholder="Поиск по реестру..."
+            placeholder="Поиск по всем полям карточки, датам, комментариям и именам файлов…"
             clearable
             class="registry-topbar__search"
           />
@@ -203,7 +209,7 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item v-if="canEdit || canDeleteRequirements" command="toggle-selection">
-                  {{ selectionMode ? 'Завершить выделение' : 'Выделить' }}
+                  Снять выделение
                 </el-dropdown-item>
                 <el-dropdown-item v-if="canEdit" command="import">Импорт предложений</el-dropdown-item>
                 <el-dropdown-item v-if="canEdit" command="template">Шаблон предложений (Excel)</el-dropdown-item>
@@ -222,13 +228,13 @@
       </div>
 
       <!-- Фильтры -->
-      <el-card v-show="showToolbarPanel" class="toolbar-card toolbar-card--scaled" shadow="never">
-        <div class="toolbar-row">
-          <div class="toolbar-left">
-            <div class="main-filters">
-            </div>
+      <el-card v-show="showToolbarPanel" class="toolbar-card" shadow="never">
+        <div class="toolbar-card-inner">
+          <div class="toolbar-row">
+            <div class="toolbar-left">
+              <div class="main-filters"></div>
 
-            <div class="filters-row-compact">
+              <div class="filters-row-compact">
               <span class="filters-row-compact__label">
                 <svg
                   class="filters-row-compact__icon"
@@ -292,57 +298,25 @@
 
               <label class="sequence-sort-toggle">
                 <span class="sequence-sort-toggle__label">Сначала ранние</span>
-                <el-switch v-model="sequenceSortAsc" class="sequence-sort-switch" />
+                <el-switch v-model="sequenceSortAscUi" size="small" class="sequence-sort-switch toolbar-filter-switch--compact" />
               </label>
 
               <label class="filter-no-fn-toggle">
                 <span class="filter-no-fn-toggle__label">Без функций</span>
-                <el-switch v-model="filterNoFunction" class="filter-no-fn-switch" />
+                <el-switch v-model="filterNoFunction" size="small" class="toolbar-filter-switch--compact" />
               </label>
 
               <el-tooltip content="Сбросить фильтры" placement="top">
-                <el-button class="reset-filters-btn" circle size="small" @click="resetFilters">
+                <el-button class="reset-filters-btn" circle @click="resetFilters">
                   <el-icon><Close /></el-icon>
                 </el-button>
               </el-tooltip>
-            </div>
-            <div v-if="selectionMode" class="selection-actions-row">
-              <el-button
-                v-if="canEdit"
-                type="warning"
-                plain
-                :disabled="selectedRows.length === 0"
-                @click="handleArchiveSelected"
-              >
-                В архив ({{ selectedRows.length }})
-              </el-button>
-              <el-button
-                v-if="canEdit"
-                type="info"
-                plain
-                :disabled="selectedRows.length === 0"
-                @click="handleUnlinkGKSelected"
-              >
-                Отвязать ГК ({{ selectedRows.length }})
-              </el-button>
-              <el-button
-                v-if="canDeleteRequirements"
-                type="danger"
-                plain
-                :disabled="selectedRows.length === 0"
-                @click="handleDeleteSelected"
-              >
-                Удалить ({{ selectedRows.length }})
-              </el-button>
-              <el-button @click="exitSelectionMode">Готово</el-button>
+              </div>
             </div>
           </div>
-
-        </div>
-        <div class="toolbar-footer-toggle">
-          <el-button text size="small" @click="showToolbarPanel = false">
-            Скрыть
-          </el-button>
+          <div class="toolbar-hide-btn">
+            <el-button text size="small" @click="showToolbarPanel = false">Скрыть</el-button>
+          </div>
         </div>
       </el-card>
 
@@ -350,292 +324,38 @@
       <el-card class="table-card" shadow="never">
         <div class="table-stack">
           <template v-if="viewMode === 'table'">
-          <div
-            class="table-header-scroll"
-            ref="tableHeaderScrollRef"
-            :style="{ paddingRight: `${tableBodyScrollbarWidth}px` }"
-            aria-hidden="true"
-          >
-            <div class="table-width-box" :style="{ width: `${tableWidth}px` }">
-              <div class="requirements-header-sticky">
-                <table class="requirements-header-table" aria-hidden="true">
-                  <colgroup>
-                    <col v-if="selectionMode" style="width: 48px" />
-                    <col style="width: 56px" />
-                    <col style="width: 150px" />
-                    <col style="width: 330px" />
-                    <col style="width: 180px" />
-                    <col style="width: 200px" />
-                    <col style="width: 130px" />
-                    <col style="width: 120px" />
-                    <col style="width: 190px" />
-                    <col style="width: 280px" />
-                    <col style="width: 150px" />
-                    <col style="width: 130px" />
-                    <col style="width: 200px" />
-                    <col style="width: 520px" />
-                    <col style="width: 400px" />
-                    <col style="width: 128px" />
-                    <col style="width: 128px" />
-                    <col style="width: 64px" />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th v-if="selectionMode"></th>
-                      <th>№</th>
-                      <th>ID</th>
-                      <th>Наименование</th>
-                      <th>Инициатор</th>
-                      <th>Ответственный</th>
-                      <th>Раздел</th>
-                      <th>Приоритет</th>
-                      <th>ГК</th>
-                      <th>Функция НМЦК, ТЗ</th>
-                      <th>Статус</th>
-                      <th>Система</th>
-                      <th>Письмо в ДИТ</th>
-                      <th>Предложение</th>
-                      <th>Комментарии и описание проблем</th>
-                      <th>Дата создания</th>
-                      <th>Дата выполнения</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                </table>
+            <div
+              v-loading="loading"
+              class="table-horizontal-wrap"
+              element-loading-background="rgba(255, 255, 255, 0.72)"
+            >
+              <div class="requirements-component-table" :style="{ width: `${tableWidth}px` }">
+                <RequirementsListHeader
+                  :columns-template="tableColumnsTemplate"
+                  :selection-mode="selectionMode"
+                  :all-selected="allPageSelected"
+                  :some-selected="somePageSelected"
+                  @toggle-all="toggleSelectAllOnPage"
+                />
+                <div v-if="pagedItems.length > 0" class="requirements-component-table__rows">
+                  <RequirementListRow
+                    v-for="row in pagedItems"
+                    :key="row.id"
+                    :row="row"
+                    :columns-template="tableColumnsTemplate"
+                    :selection-mode="selectionMode"
+                    :is-selected="isRowSelected(row.id)"
+                    :can-edit="canEdit"
+                    :can-delete-requirements="canDeleteRequirements"
+                    @toggle-select="(checked) => toggleRowSelectionById(row, checked)"
+                    @open="handleRowClick(row)"
+                    @open-tz="openTzInfo(row)"
+                    @menu-command="(cmd) => handleRowMenuCommand(cmd, row)"
+                  />
+                </div>
+                <el-empty v-else description="Нет предложений по выбранным условиям" />
               </div>
             </div>
-          </div>
-
-          <div
-            class="table-header-scroll"
-            ref="tableHeaderScrollRef"
-            :style="{ paddingRight: `${tableBodyScrollbarWidth}px` }"
-            aria-hidden="true"
-          >
-            <div class="table-width-box" :style="{ width: `${tableWidth}px` }">
-              <div class="requirements-header-sticky">
-                <table class="requirements-header-table" aria-hidden="true">
-                  <colgroup>
-                    <col v-if="selectionMode" style="width: 48px" />
-                    <col style="width: 56px" />
-                    <col style="width: 150px" />
-                    <col style="width: 330px" />
-                    <col style="width: 180px" />
-                    <col style="width: 200px" />
-                    <col style="width: 130px" />
-                    <col style="width: 120px" />
-                    <col style="width: 190px" />
-                    <col style="width: 280px" />
-                    <col style="width: 150px" />
-                    <col style="width: 130px" />
-                    <col style="width: 200px" />
-                    <col style="width: 520px" />
-                    <col style="width: 400px" />
-                    <col style="width: 128px" />
-                    <col style="width: 128px" />
-                    <col style="width: 64px" />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th v-if="selectionMode"></th>
-                      <th>№</th>
-                      <th>ID</th>
-                      <th>Наименование</th>
-                      <th>Инициатор</th>
-                      <th>Ответственный</th>
-                      <th>Раздел</th>
-                      <th>Приоритет</th>
-                      <th>ГК</th>
-                      <th>Функция НМЦК, ТЗ</th>
-                      <th>Статус</th>
-                      <th>Система</th>
-                      <th>Письмо в ДИТ</th>
-                      <th>Предложение</th>
-                      <th>Комментарии и описание проблем</th>
-                      <th>Дата создания</th>
-                      <th>Дата выполнения</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div
-            v-loading="loading"
-            class="table-horizontal-wrap"
-            ref="tableBodyScrollRef"
-            @scroll.passive="syncHeaderScroll"
-            element-loading-background="rgba(255, 255, 255, 0.72)"
-          >
-            <div class="table-width-box" :style="{ width: `${tableWidth}px` }">
-              <el-table
-                ref="tableRef"
-                class="requirements-table"
-                :class="{ 'drag-selecting': dragSelectionActive }"
-                :data="pagedItems"
-                @row-click="handleRowClick"
-                @selection-change="handleSelectionChange"
-                @cell-mouse-enter="handleCellMouseEnter"
-                row-key="id"
-                stripe
-                border
-                empty-text="Нет предложений по выбранным условиям"
-                :row-class-name="getRowClassName"
-                table-layout="fixed"
-                :fit="false"
-                :show-header="false"
-                :style="{ width: `${tableWidth}px` }"
-              >
-                <el-table-column v-if="selectionMode" type="selection" width="48" />
-                <el-table-column
-                  prop="sequenceNumber"
-                  label="№"
-                  width="56"
-                  class-name="sequence-col"
-                />
-                <el-table-column prop="taskIdentifier" label="ID" width="150" />
-
-                <el-table-column
-                  prop="shortName"
-                  label="Наименование"
-                  width="330"
-                  show-overflow-tooltip
-                />
-
-                <el-table-column
-                  prop="initiator"
-                  label="Инициатор"
-                  width="180"
-                  show-overflow-tooltip
-                />
-
-                <el-table-column
-                  prop="responsiblePerson"
-                  label="Ответственный"
-                  width="200"
-                  show-overflow-tooltip
-                />
-
-                <el-table-column
-                  prop="sectionName"
-                  label="Раздел"
-                  width="130"
-                  show-overflow-tooltip
-                />
-
-                <el-table-column prop="implementationQueue" label="Приоритет" width="120">
-                  <template #default="{ row }">
-                    <QueueTag :queue="row.implementationQueue" />
-                  </template>
-                </el-table-column>
-
-                <el-table-column label="ГК" width="190" show-overflow-tooltip>
-                  <template #default="{ row }">
-                    <span class="gk-cell">
-                      {{ row.contractName || '—' }}
-                      <span
-                        v-if="row.contractUseShortNameInTaskId && (row.contractShortName || '').trim()"
-                        class="gk-short-hint"
-                      >
-                        ({{ row.contractShortName }})
-                      </span>
-                    </span>
-                  </template>
-                </el-table-column>
-
-                <el-table-column label="Функция НМЦК, ТЗ" width="280" class-name="tz-col">
-                  <template #default="{ row }">
-                    <button
-                      type="button"
-                      class="tz-cell-link"
-                      :disabled="!tzCellLabel(row)"
-                      :title="tzCellLabel(row) || undefined"
-                      @click.stop="openTzInfo(row)"
-                    >
-                      {{ tzCellLabel(row) || '—' }}
-                    </button>
-                  </template>
-                </el-table-column>
-
-                <el-table-column prop="statusText" label="Статус" width="150">
-                  <template #default="{ row }">
-                    <StatusTag :status="row.statusText" />
-                  </template>
-                </el-table-column>
-
-                <el-table-column label="Система" width="130">
-                  <template #default="{ row }">
-                    {{ systemTypeLabel(row.systemType) }}
-                  </template>
-                </el-table-column>
-
-                <el-table-column label="Письмо в ДИТ" width="200" show-overflow-tooltip>
-                  <template #default="{ row }">
-                    {{ ditLetterCell(row) }}
-                  </template>
-                </el-table-column>
-
-                <el-table-column label="Предложение" width="520">
-                  <template #default="{ row }">
-                    <span class="cell-clamp" :title="row.proposalText">
-                      {{ shortText(row.proposalText, 90) }}
-                    </span>
-                  </template>
-                </el-table-column>
-
-                <el-table-column label="Комментарии и описание проблем" width="400">
-                  <template #default="{ row }">
-                    <span class="cell-clamp" :title="row.problemComment">
-                      {{ shortText(row.problemComment, 90) }}
-                    </span>
-                  </template>
-                </el-table-column>
-
-                <el-table-column label="Дата создания" width="128">
-                  <template #default="{ row }">
-                    {{ formatTableDate(row.createdAt) }}
-                  </template>
-                </el-table-column>
-
-                <el-table-column label="Дата выполнения" width="128">
-                  <template #default="{ row }">
-                    {{ formatTableDate(row.completedAt) }}
-                  </template>
-                </el-table-column>
-
-                <el-table-column
-                  label=""
-                  width="64"
-                  align="center"
-                  class-name="row-menu-col"
-                >
-                  <template #default="{ row }">
-                    <el-dropdown trigger="click" @command="(cmd: string) => handleRowMenuCommand(cmd, row)">
-                      <el-button size="small" circle class="row-menu-trigger" @click.stop>
-                        <el-icon class="row-menu-ellipsis"><MoreFilled /></el-icon>
-                      </el-button>
-                      <template #dropdown>
-                        <el-dropdown-menu>
-                          <el-dropdown-item command="open">Просмотр</el-dropdown-item>
-                          <template v-if="canDeleteRequirements">
-                            <el-dropdown-item command="delete" divided>Удалить</el-dropdown-item>
-                          </template>
-                          <template v-if="canEdit">
-                            <el-dropdown-item v-if="!row.isArchived" command="archive">
-                              В архив
-                            </el-dropdown-item>
-                            <el-dropdown-item v-else command="restore">Восстановить</el-dropdown-item>
-                          </template>
-                        </el-dropdown-menu>
-                      </template>
-                    </el-dropdown>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </div>
-          </div>
           <div v-if="items.length > 0" class="table-pagination-panel">
             <div class="table-pagination">
               <el-pagination
@@ -718,6 +438,40 @@
         </div>
       </el-card>
 
+      <div v-if="selectedRows.length > 0" class="bulk-actions-sticky">
+        <div class="bulk-actions-sticky__left">
+          <el-icon class="bulk-actions-sticky__check" :size="18"><CircleCheckFilled /></el-icon>
+          <span>{{ bulkSelectionLabel }}</span>
+        </div>
+        <span class="bulk-divider" aria-hidden="true" />
+        <div class="bulk-actions-sticky__actions">
+          <el-button v-if="canEdit" class="bulk-btn bulk-btn--neutral" @click="handleArchiveSelected">
+            <template #icon>
+              <ArchiveIcon :size="16" :stroke-width="2" />
+            </template>
+            Архивировать
+          </el-button>
+          <el-button v-if="canEdit" class="bulk-btn bulk-btn--neutral" @click="handleUnlinkGKSelected">
+            <template #icon>
+              <UnlinkIcon :size="16" :stroke-width="2" />
+            </template>
+            Отвязать ГК
+          </el-button>
+          <el-button
+            v-if="canDeleteRequirements"
+            class="bulk-btn bulk-btn--danger"
+            :icon="Delete"
+            @click="handleDeleteSelected"
+          >
+            Удалить
+          </el-button>
+        </div>
+        <span class="bulk-divider" aria-hidden="true" />
+        <el-button class="bulk-btn bulk-btn--close" aria-label="Снять выделение" @click="exitSelectionMode">
+          <CloseIcon :size="16" :stroke-width="2" />
+        </el-button>
+      </div>
+
       <!-- Модалки -->
       <RequirementFormDialog
         v-if="canEdit"
@@ -753,10 +507,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Close, MoreFilled, Plus } from '@element-plus/icons-vue'
+import { ArrowDown, CircleCheckFilled, Close, Delete, Plus } from '@element-plus/icons-vue'
+import { Archive as ArchiveIcon, Unlink as UnlinkIcon, X as CloseIcon } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import {
   type ArchiveRequirementReason,
@@ -776,6 +531,8 @@ import RequirementDetailsDrawer from '@/components/RequirementDetailsDrawer.vue'
 import ImportExcelDialog from '@/components/ImportExcelDialog.vue'
 import ProfileDrawer from '@/components/ProfileDrawer.vue'
 import RequirementTzInfoDialog from '@/components/RequirementTzInfoDialog.vue'
+import RequirementsListHeader from '@/components/requirements/RequirementsListHeader.vue'
+import RequirementListRow from '@/components/requirements/RequirementListRow.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import QueueTag from '@/components/QueueTag.vue'
 import { STANDARD_REQUIREMENT_STATUSES } from '@/constants/requirementStatuses'
@@ -786,6 +543,7 @@ import type { QueueItem, Requirement } from '@/types'
  * Router для переходов между страницами.
  */
 const router = useRouter()
+const route = useRoute()
 
 /**
  * Текущий пользователь из store.
@@ -812,11 +570,7 @@ const selectedRequirementId = ref<number | null>(null)
 const selectedRows = ref<Requirement[]>([])
 const tzInfoVisible = ref(false)
 const tzInfoRequirementId = ref<number | null>(null)
-const tableRef = ref<any>(null)
-const selectionMode = ref(false)
-const dragSelectionActive = ref(false)
-const dragSelectionChecked = ref(false)
-const dragVisitedRowIds = new Set<number>()
+const selectionMode = ref(true)
 
 const archiveFilterMode = ref<'active' | 'all' | 'archived_only'>('active')
 const DEFAULT_QUEUE_NAME = 'Не определена'
@@ -827,35 +581,42 @@ const DEFAULT_QUEUE_NAME = 'Не определена'
 const items = shallowRef<Requirement[]>([])
 const queues = ref<QueueItem[]>([])
 
-/** Сумма ширин колонок (table-layout: fixed). */
-const tableWidthBase = 3356
-const tableWidth = computed(() => tableWidthBase + (selectionMode.value ? 48 : 0))
 /** Клиентская пагинация: меньше узлов в DOM → отзывчивее интерфейс. */
 const tablePage = ref(1)
-const tablePageSize = ref(50)
+const tablePageSize = ref(25)
 const showToolbarPanel = ref(true)
 const viewMode = ref<'table' | 'cards'>('table')
+const tableWidthBase = 3356
+const tableWidth = computed(() => tableWidthBase + (selectionMode.value ? 48 : 0))
+const tableColumnsTemplate = computed(() =>
+  selectionMode.value
+    ? '48px 56px 150px 330px 180px 200px 130px 120px 190px 280px 150px 130px 200px 520px 400px 128px 128px 64px'
+    : '56px 150px 330px 180px 200px 130px 120px 190px 280px 150px 130px 200px 520px 400px 128px 128px 64px',
+)
 
 const pagedItems = computed(() => {
   const list = [...items.value].sort(compareRequirementsBySequence)
   const start = (tablePage.value - 1) * tablePageSize.value
   return list.slice(start, start + tablePageSize.value)
 })
+const selectedRowIds = computed(() => new Set(selectedRows.value.map((row) => row.id)))
+const allPageSelected = computed(
+  () => pagedItems.value.length > 0 && pagedItems.value.every((row) => selectedRowIds.value.has(row.id)),
+)
+const somePageSelected = computed(
+  () => !allPageSelected.value && pagedItems.value.some((row) => selectedRowIds.value.has(row.id)),
+)
 
-const tableHeaderScrollRef = ref<HTMLElement | null>(null)
-const tableBodyScrollRef = ref<HTMLElement | null>(null)
-const tableBodyScrollbarWidth = ref(0)
-
-function syncHeaderScrollbarCompensation() {
-  if (!tableBodyScrollRef.value) return
-  tableBodyScrollbarWidth.value =
-    tableBodyScrollRef.value.offsetWidth - tableBodyScrollRef.value.clientWidth
-}
-
-function syncHeaderScroll() {
-  if (!tableHeaderScrollRef.value || !tableBodyScrollRef.value) return
-  tableHeaderScrollRef.value.scrollLeft = tableBodyScrollRef.value.scrollLeft
-}
+/** Подпись для панели массовых действий: «N записей выбраны» с правильным склонением. */
+const bulkSelectionLabel = computed(() => {
+  const n = selectedRows.value.length
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod100 >= 11 && mod100 <= 14) return `${n} записей выбраны`
+  if (mod10 === 1) return `${n} запись выбрана`
+  if (mod10 >= 2 && mod10 <= 4) return `${n} записи выбраны`
+  return `${n} записей выбраны`
+})
 
 /**
  * Фильтры списка.
@@ -869,7 +630,23 @@ const implementationQueue = ref('')
 
 const filterNoFunction = ref(false)
 const sequenceSortAsc = ref(false)
+const sequenceSortAscUi = ref(false)
 const sectionsDropdownOpen = ref(false)
+
+let sortSwitchApplyTimer: ReturnType<typeof setTimeout> | null = null
+
+function applySequenceSortDeferred(nextValue: boolean) {
+  if (sortSwitchApplyTimer) {
+    clearTimeout(sortSwitchApplyTimer)
+    sortSwitchApplyTimer = null
+  }
+  // Даём свитчу завершить анимацию и только потом запускаем тяжелую часть (пересортировку).
+  sortSwitchApplyTimer = setTimeout(() => {
+    sequenceSortAsc.value = nextValue
+    tablePage.value = 1
+    sortSwitchApplyTimer = null
+  }, 260)
+}
 
 
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -1003,6 +780,7 @@ function resetFilters() {
   archiveFilterMode.value = 'active'
   implementationQueue.value = ''
   filterNoFunction.value = false
+  sequenceSortAscUi.value = false
   sequenceSortAsc.value = false
   tablePage.value = 1
   clearSearchDebounce()
@@ -1082,11 +860,7 @@ async function loadData() {
     if (seq !== loadListSeq) return
     items.value = data
     selectedRows.value = []
-    tableRef.value?.clearSelection?.()
     tablePage.value = 1
-    await nextTick()
-    syncHeaderScrollbarCompensation()
-    syncHeaderScroll()
   } catch (error: any) {
     if (seq !== loadListSeq) return
     ElMessage.error(error?.response?.data?.message || 'Ошибка загрузки')
@@ -1140,41 +914,37 @@ async function handleArchive(row: Requirement) {
   }
 }
 
-function handleSelectionChange(rows: Requirement[]) {
-  selectedRows.value = rows
-}
-
-function isSelectionColumn(column: any) {
-  return column?.type === 'selection' || column?.columnKey === 'selection'
-}
-
 function isRowSelected(id: number) {
-  return selectedRows.value.some((row) => row.id === id)
+  return selectedRowIds.value.has(id)
 }
 
-function applyDragSelection(row: Requirement) {
-  if (dragVisitedRowIds.has(row.id)) return
-  dragVisitedRowIds.add(row.id)
-  tableRef.value?.toggleRowSelection?.(row, dragSelectionChecked.value)
+function toggleRowSelectionById(row: Requirement, checked: boolean) {
+  const next = new Set(selectedRows.value.map((x) => x.id))
+  if (checked) next.add(row.id)
+  else next.delete(row.id)
+  selectedRows.value = items.value.filter((x) => next.has(x.id))
+}
+
+function toggleSelectAllOnPage() {
+  const next = new Set(selectedRows.value.map((x) => x.id))
+  if (allPageSelected.value) {
+    for (const row of pagedItems.value) next.delete(row.id)
+  } else {
+    for (const row of pagedItems.value) next.add(row.id)
+  }
+  selectedRows.value = items.value.filter((x) => next.has(x.id))
 }
 
 function exitSelectionMode() {
-  selectionMode.value = false
   selectedRows.value = []
-  dragSelectionActive.value = false
-  dragVisitedRowIds.clear()
-  tableRef.value?.clearSelection?.()
 }
 
 function setViewMode(mode: 'table' | 'cards') {
-  if (selectionMode.value) {
-    exitSelectionMode()
-  }
+  exitSelectionMode()
   viewMode.value = mode
 }
 
 function handleCardClick(row: Requirement) {
-  if (selectionMode.value) return
   selectedRequirementId.value = row.id
   detailsVisible.value = true
 }
@@ -1214,23 +984,6 @@ function cardToneClass(row: Requirement) {
   if (v.includes('подтвержд')) return 'requirement-list-card--tone-confirmed'
   if (v.includes('учтен')) return 'requirement-list-card--tone-accounted'
   return 'requirement-list-card--tone-new'
-}
-
-function handleCellMouseEnter(row: Requirement, column: any, _cell: HTMLElement, event: MouseEvent) {
-  if (!selectionMode.value) return
-  if (event.buttons !== 1) return
-  if (!isSelectionColumn(column)) return
-  if (!dragSelectionActive.value) {
-    dragSelectionActive.value = true
-    dragVisitedRowIds.clear()
-    dragSelectionChecked.value = !isRowSelected(row.id)
-  }
-  applyDragSelection(row)
-}
-
-function handleDragSelectionStop() {
-  dragSelectionActive.value = false
-  dragVisitedRowIds.clear()
 }
 
 async function handleArchiveSelected() {
@@ -1339,17 +1092,7 @@ function handleHeaderToolsCommand(cmd: string) {
 
 function handleImportMenuCommand(cmd: string) {
   if (cmd === 'toggle-selection') {
-    if (!canEdit.value && !canDeleteRequirements.value) {
-      ElMessage.warning('Недостаточно прав для режима выделения')
-      return
-    }
-    if (selectionMode.value) {
-      exitSelectionMode()
-    } else {
-      selectionMode.value = true
-      selectedRows.value = []
-      tableRef.value?.clearSelection?.()
-    }
+    exitSelectionMode()
     return
   }
   if (cmd === 'import') {
@@ -1507,8 +1250,6 @@ async function handleDeleteAllRequirements() {
  * Открытие карточки записи.
  */
 function handleRowClick(row: Requirement, column?: any) {
-  if (selectionMode.value) return
-  if (isSelectionColumn(column)) return
   selectedRequirementId.value = row.id
   detailsVisible.value = true
 }
@@ -1531,11 +1272,6 @@ function handleRowMenuCommand(cmd: string, row: Requirement) {
   }
 }
 
-function getRowClassName({ row }: { row: Requirement }) {
-  if (!row.isArchived) return ''
-  return row.archivedReason === 'completed' ? 'archived-row archived-row--completed' : 'archived-row archived-row--outdated'
-}
-
 watch(
   () => [items.value.length, tablePageSize.value] as const,
   () => {
@@ -1546,12 +1282,16 @@ watch(
 )
 
 watch(
-  [status, implementationQueue, archiveFilterMode, filterNoFunction, sequenceSortAsc],
+  [status, implementationQueue, archiveFilterMode, filterNoFunction],
   () => {
     clearSearchDebounce()
     debouncedReloadList()
   },
 )
+
+watch(sequenceSortAscUi, (nextValue) => {
+  applySequenceSortDeferred(nextValue)
+})
 
 watch(search, () => {
   clearSearchDebounce()
@@ -1569,22 +1309,27 @@ function onRequirementDeletedFromDrawer() {
 }
 
 onMounted(async () => {
-  window.addEventListener('resize', syncHeaderScrollbarCompensation)
-  window.addEventListener('mouseup', handleDragSelectionStop)
+  const q = route.query.search
+  if (typeof q === 'string' && q.trim()) {
+    search.value = q.trim()
+  }
   await Promise.all([loadQueues(), loadData()])
-  await nextTick()
-  syncHeaderScrollbarCompensation()
-  syncHeaderScroll()
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', syncHeaderScrollbarCompensation)
-  window.removeEventListener('mouseup', handleDragSelectionStop)
+  if (sortSwitchApplyTimer) {
+    clearTimeout(sortSwitchApplyTimer)
+    sortSwitchApplyTimer = null
+  }
 })
 </script>
 
 <style scoped>
 .page {
+  /* Единый горизонтальный отступ для шапки, «Реестр…», фильтров и левого края таблицы (фон страницы на всю ширину). */
+  --requirements-page-gutter: 22px;
+  /* Боковой inset только у тела таблицы; шапка выходит в full-bleed (см. RequirementsListHeader). */
+  --requirements-table-h-inset: calc(var(--requirements-page-gutter) - 10px);
   min-height: 100vh;
   width: 100%;
   overflow-x: hidden;
@@ -1604,7 +1349,7 @@ onBeforeUnmount(() => {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 0;
   overflow-x: hidden;
   box-sizing: border-box;
 }
@@ -1621,7 +1366,7 @@ onBeforeUnmount(() => {
   background: #0f172a;
   border: 1px solid #1e293b;
   border-radius: 0;
-  padding: 6px 10px;
+  padding: 6px var(--requirements-page-gutter);
   box-shadow: 0 4px 12px rgba(8, 20, 40, 0.2);
 }
 
@@ -1698,13 +1443,13 @@ onBeforeUnmount(() => {
 }
 
 .variant-switch__option.is-active {
-  background: #2563eb;
+  background: var(--el-color-primary);
   color: #ffffff;
   box-shadow: none;
 }
 
 .variant-switch__option:nth-child(2).is-active {
-  background: #2563eb;
+  background: var(--el-color-primary);
   color: #ffffff;
   box-shadow: none;
 }
@@ -1777,7 +1522,7 @@ onBeforeUnmount(() => {
   padding: 6px 10px;
   border-radius: 8px;
   background: #e2eaf4;
-  color: #1e4d7b;
+  color: var(--el-color-primary);
   font-size: 13px;
   font-weight: 600;
   align-self: center;
@@ -1796,16 +1541,20 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
+.page-header--dark .header-user-meta {
+  margin-left: 28px;
+}
+
 .sections-btn {
-  --el-button-bg-color: #2563eb;
-  --el-button-border-color: #2563eb;
+  --el-button-bg-color: var(--el-color-primary);
+  --el-button-border-color: var(--el-color-primary);
   --el-button-text-color: #ffffff;
-  --el-button-hover-bg-color: #1d4ed8;
-  --el-button-hover-border-color: #1d4ed8;
+  --el-button-hover-bg-color: var(--el-color-primary-light-3);
+  --el-button-hover-border-color: var(--el-color-primary-light-3);
   --el-button-hover-text-color: #ffffff;
-  --el-button-active-bg-color: #1e40af;
-  --el-button-active-border-color: #1e40af;
-  --el-button-outline-color: rgba(37, 99, 235, 0.3);
+  --el-button-active-bg-color: var(--el-color-primary-dark-2);
+  --el-button-active-border-color: var(--el-color-primary-dark-2);
+  --el-button-outline-color: rgba(var(--el-color-primary-rgb), 0.3);
   font-size: 12px;
   font-weight: 600;
   border-radius: 8px;
@@ -1857,6 +1606,8 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .registry-topbar {
@@ -1867,7 +1618,10 @@ onBeforeUnmount(() => {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 0;
-  padding: 8px 12px;
+  border-bottom: 0;
+  padding: 8px var(--requirements-page-gutter);
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .registry-topbar__left {
@@ -1924,13 +1678,13 @@ onBeforeUnmount(() => {
 }
 
 .registry-topbar__add-btn {
-  --el-button-bg-color: #2563eb;
-  --el-button-border-color: #2563eb;
+  --el-button-bg-color: var(--el-color-primary);
+  --el-button-border-color: var(--el-color-primary);
   --el-button-text-color: #ffffff;
-  --el-button-hover-bg-color: #1d4ed8;
-  --el-button-hover-border-color: #1d4ed8;
-  --el-button-active-bg-color: #1e40af;
-  --el-button-active-border-color: #1e40af;
+  --el-button-hover-bg-color: var(--el-color-primary-light-3);
+  --el-button-hover-border-color: var(--el-color-primary-light-3);
+  --el-button-active-bg-color: var(--el-color-primary-dark-2);
+  --el-button-active-border-color: var(--el-color-primary-dark-2);
   min-height: 36px;
   border-radius: 8px;
   padding: 0 14px;
@@ -2010,6 +1764,14 @@ onBeforeUnmount(() => {
 
 .reset-filters-btn {
   flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+
+.reset-filters-btn :deep(.el-icon) {
+  font-size: 14px;
 }
 
 .filter-no-fn {
@@ -2020,22 +1782,14 @@ onBeforeUnmount(() => {
 .filter-no-fn-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   white-space: nowrap;
 }
 
 .filter-no-fn-toggle__label {
-  font-size: 13px;
-  color: #4b5565;
-}
-
-.filter-no-fn-switch :deep(.el-switch__core) {
-  height: 18px;
-}
-
-.filter-no-fn-switch :deep(.el-switch__core::after) {
-  width: 12px;
-  height: 12px;
+  font-size: 14px;
+  font-weight: 400;
+  color: #334155;
 }
 
 .list-sort-switch :deep(.el-switch__core) {
@@ -2069,18 +1823,56 @@ onBeforeUnmount(() => {
   display: none;
 }
 
+.header-user-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.header-user-meta__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  min-width: 0;
+  max-width: min(280px, 36vw);
+}
+
+.header-user-meta__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f1f5f9;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.header-user-meta__org {
+  font-size: 12px;
+  font-weight: 500;
+  color: #cbd5e1;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
 .user-avatar-btn {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border: 2px solid #5d7fb3;
-  background: linear-gradient(145deg, #1e4d7b, #2d6a4f);
+  border: 2px solid var(--el-color-primary-light-5);
+  background: linear-gradient(145deg, var(--el-color-primary), var(--el-color-primary-dark-2));
   color: #fff;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(30, 77, 123, 0.25);
+  box-shadow: 0 2px 8px rgba(var(--el-color-primary-rgb), 0.28);
 }
 
 .user-avatar-btn:hover {
@@ -2088,8 +1880,9 @@ onBeforeUnmount(() => {
 }
 
 .archive-filter-select {
-  width: 200px;
-  flex: 0 0 200px;
+  min-width: 220px;
+  width: 220px;
+  flex: 0 1 220px;
 }
 
 .tz-cell-link {
@@ -2099,7 +1892,7 @@ onBeforeUnmount(() => {
   margin: 0;
   border: none;
   background: none;
-  color: #1e4d7b;
+  color: var(--el-color-primary);
   font: inherit;
   font-size: 13px;
   text-align: left;
@@ -2113,7 +1906,7 @@ onBeforeUnmount(() => {
 }
 
 .tz-cell-link:hover:not(:disabled) {
-  color: #163a5e;
+  color: var(--el-color-primary-dark-2);
 }
 
 .tz-cell-link:disabled {
@@ -2172,20 +1965,29 @@ onBeforeUnmount(() => {
 
 .summary-card--main {
   width: 168px;
-  height: 48px;
+  height: 44px;
   cursor: default;
   margin-top: 0;
 }
 
 .summary-card--nav {
   margin: 0;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(37, 99, 235, 0.35);
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.summary-card--nav .summary-label {
+  color: #111827;
+}
+
+.summary-card--nav .summary-value {
+  color: #111827;
 }
 
 .summary-card--main :deep(.el-card__body) {
   height: 100%;
-  padding: 7px 10px;
+  padding: 5px 10px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -2261,22 +2063,22 @@ onBeforeUnmount(() => {
 
 .queue-card--1 {
   background: #f9dfe8;
-  border-color: #f2c6d4;
+  border: 0;
 }
 
 .queue-card--2 {
   background: #fff4cc;
-  border-color: #f3e3a2;
+  border: 0;
 }
 
 .queue-card--3 {
   background: #dff5df;
-  border-color: #c5e7c7;
+  border: 0;
 }
 
 .queue-card--default {
   background: #eef2f7;
-  border-color: #dde3eb;
+  border: 0;
 }
 
 /* Полу-прозрачный контейнер поповера. */
@@ -2301,23 +2103,44 @@ onBeforeUnmount(() => {
 .toolbar-card {
   min-width: 0;
   position: relative;
+  border-top: 1px solid #d9e1ec;
+  border-radius: 0;
+  margin-top: 0;
+  overflow: hidden;
+}
+
+:deep(.toolbar-card.el-card) {
+  border-radius: 0 !important;
+}
+
+:deep(.toolbar-card .el-card__body) {
+  border-radius: 0 !important;
+  padding: 10px var(--requirements-page-gutter);
 }
 
 .toolbar-toggle-row {
   display: flex;
   justify-content: center;
   align-items: center;
+  border-top: 1px solid #d9e1ec;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-left: var(--requirements-page-gutter);
+  padding-right: var(--requirements-page-gutter);
 }
 
-.toolbar-card--scaled :deep(.el-card__body) {
-  zoom: 0.92;
+.toolbar-card-inner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
-.toolbar-footer-toggle {
-  position: absolute;
-  right: 12px;
-  bottom: 8px;
-  z-index: 2;
+.toolbar-hide-btn {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  align-self: center;
 }
 
 .table-card {
@@ -2327,6 +2150,15 @@ onBeforeUnmount(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  border-top: 1px solid #d9e1ec;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-radius: 0 !important;
+  margin-top: 0;
+}
+
+:deep(.table-card.el-card) {
+  border-radius: 0 !important;
 }
 
 .table-card :deep(.el-card__body) {
@@ -2336,8 +2168,9 @@ onBeforeUnmount(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 10px 12px 8px;
+  padding: 0 0 8px;
   box-sizing: border-box;
+  border-radius: 0 !important;
 }
 
 .table-stack {
@@ -2354,7 +2187,9 @@ onBeforeUnmount(() => {
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-  border-bottom: 1px solid var(--el-table-border-color);
+  border-bottom: 1px solid #d9e3f0;
+  background: rgba(248, 251, 255, 0.9);
+  backdrop-filter: blur(4px);
 }
 
 .table-header-scroll::-webkit-scrollbar {
@@ -2370,13 +2205,16 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
+  margin: 0;
+  padding: 0 var(--requirements-table-h-inset);
 }
 
 .cards-wrap {
   flex: 1 1 auto;
   min-height: 280px;
   overflow: auto;
-  padding-right: 4px;
+  padding-left: var(--requirements-page-gutter);
+  padding-right: var(--requirements-page-gutter);
 }
 
 .requirements-cards-grid {
@@ -2512,7 +2350,7 @@ onBeforeUnmount(() => {
 }
 
 .requirement-list-card__open {
-  color: #1e4d7b;
+  color: var(--el-color-primary);
   font-weight: 600;
 }
 
@@ -2569,6 +2407,266 @@ onBeforeUnmount(() => {
   width: max-content;
 }
 
+.requirements-component-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.requirements-component-table__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid #e8eef6;
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.bulk-actions-sticky {
+  position: fixed;
+  left: 50%;
+  /* Выше горизонтального скролла таблицы и полосы окна */
+  bottom: max(88px, calc(52px + env(safe-area-inset-bottom, 0px)));
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 14px;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid rgba(71, 85, 105, 0.7);
+  border-radius: 16px;
+  background: #0f172a;
+  box-shadow: 0 14px 34px rgba(2, 6, 23, 0.45);
+  animation: bulkBarIn 180ms ease-out;
+}
+
+.bulk-actions-sticky__left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #f8fafc;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bulk-actions-sticky__check {
+  flex-shrink: 0;
+  color: var(--el-color-primary);
+}
+
+.bulk-actions-sticky__actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* У el-button по умолчанию margin-left между соседями — убираем, расстояние задаём только gap. */
+.bulk-actions-sticky__actions :deep(.el-button) {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.bulk-divider {
+  flex-shrink: 0;
+  width: 1px;
+  height: 22px;
+  background: rgba(148, 163, 184, 0.45);
+}
+
+.bulk-btn {
+  min-height: 30px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 12px;
+  --el-button-icon-gap: 10px;
+}
+
+.bulk-btn--neutral {
+  --el-button-bg-color: #1e293b;
+  --el-button-border-color: #334155;
+  --el-button-text-color: #e2e8f0;
+  --el-button-hover-bg-color: #334155;
+  --el-button-hover-border-color: #475569;
+  --el-button-hover-text-color: #ffffff;
+}
+
+.bulk-btn--danger {
+  --el-button-bg-color: rgba(127, 29, 29, 0.55);
+  --el-button-border-color: rgba(185, 28, 28, 0.55);
+  --el-button-text-color: #fecaca;
+  --el-button-hover-bg-color: rgba(153, 27, 27, 0.78);
+  --el-button-hover-border-color: rgba(239, 68, 68, 0.68);
+  --el-button-hover-text-color: #fee2e2;
+}
+
+.bulk-btn--close {
+  --el-button-icon-gap: 0;
+  min-width: 32px;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  margin: 0;
+  border-radius: 9px;
+  --el-button-bg-color: transparent;
+  --el-button-border-color: rgba(100, 116, 139, 0.45);
+  --el-button-text-color: #e2e8f0;
+  --el-button-hover-bg-color: #1e293b;
+  --el-button-hover-border-color: #64748b;
+  --el-button-hover-text-color: #f8fafc;
+}
+
+@keyframes bulkBarIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.registry-grid-shell {
+  width: 100%;
+}
+
+.registry-grid-header,
+.registry-grid-row {
+  display: grid;
+  align-items: center;
+}
+
+.registry-grid-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  min-height: 42px;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: rgba(248, 251, 255, 0.9);
+  backdrop-filter: blur(4px);
+}
+
+.registry-grid-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.registry-grid-row {
+  min-height: 56px;
+  border: 1px solid #e6edf7;
+  border-radius: 12px;
+  background: #ffffff;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+  cursor: pointer;
+}
+
+.registry-grid-row:hover {
+  border-color: #c8d8ef;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
+}
+
+.registry-grid-row--archived-completed {
+  background: #dff5df;
+  border-color: #bfe3c3;
+}
+
+.registry-grid-row--archived-outdated {
+  background: #fff4cc;
+  border-color: #f0d68a;
+}
+
+.registry-col,
+.registry-cell {
+  padding: 0 10px;
+  min-width: 0;
+}
+
+.registry-col {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.registry-col--sortable {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.registry-col--actions {
+  display: flex;
+  justify-content: center;
+}
+
+.registry-cell {
+  font-size: 13px;
+  color: #1f2937;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.registry-cell--id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.registry-cell--title {
+  font-weight: 600;
+}
+
+.registry-cell--person,
+.registry-cell--gk,
+.registry-cell--date {
+  color: #475569;
+}
+
+.registry-col--checkbox,
+.registry-cell.registry-col--checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.select-box {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.select-box.is-active {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
 .table-pagination-panel {
   flex-shrink: 0;
   padding-top: 6px;
@@ -2603,6 +2701,12 @@ onBeforeUnmount(() => {
 
 .requirements-table {
   width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.requirements-table :deep(.el-table__header-wrapper) {
+  border-bottom: 1px solid #d7e1ef;
 }
 
 .requirements-table.drag-selecting :deep(td.el-table__cell),
@@ -2624,13 +2728,15 @@ onBeforeUnmount(() => {
 
 .requirements-header-table th {
   position: relative;
-  padding: 10px 8px;
-  font-size: 13px;
-  font-weight: 600;
+  padding: 9px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   text-align: left;
-  color: #1f2937;
+  color: #64748b;
   background: #f8fbff;
-  border: 1px solid var(--el-table-border-color);
+  border: 1px solid #dbe4f0;
 }
 
 .requirements-header-table th:not(:last-child)::after {
@@ -2654,19 +2760,49 @@ onBeforeUnmount(() => {
 }
 
 .requirements-table :deep(th.el-table__cell) {
-  padding: 10px 8px;
-  font-size: 13px;
-  background: #f8fbff;
+  padding: 8px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  background: #f7faff;
 }
 
 .requirements-table :deep(td.el-table__cell) {
-  padding: 8px 8px;
-  font-size: 13px;
-  vertical-align: top;
+  padding: 6px 6px;
+  font-size: 12.5px;
+  vertical-align: middle;
+  border-right-color: #f0f4fa;
+  border-bottom-color: #e8eef6;
+  transition: background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.requirements-table :deep(.el-table__row:hover > td.el-table__cell) {
+  background: #f6faff !important;
+}
+
+.requirements-table :deep(.el-table__row.current-row > td.el-table__cell) {
+  background: #edf4ff !important;
+}
+
+.requirements-table :deep(.el-table__row > td:first-child) {
+  border-left: 3px solid transparent;
+}
+
+.requirements-table :deep(.el-table__row:hover > td:first-child) {
+  border-left-color: #bfdbfe;
+}
+
+.requirements-table :deep(.el-table__row.current-row > td:first-child) {
+  border-left-color: #3b82f6;
 }
 
 .requirements-table :deep(.cell) {
   text-overflow: clip;
+  display: flex;
+  align-items: center;
+  min-height: 100%;
 }
 
 .requirements-table :deep(.el-table__inner-wrapper) {
@@ -2691,8 +2827,72 @@ onBeforeUnmount(() => {
 }
 
 .requirements-table :deep(.row-menu-col .cell) {
-  padding: 8px 4px;
+  padding: 6px 2px;
   overflow: visible;
+}
+
+.requirements-table :deep(.row-menu-trigger) {
+  opacity: 0;
+  transform: translateY(1px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.requirements-table :deep(.el-table__row:hover .row-menu-trigger),
+.requirements-table :deep(.el-table__row.current-row .row-menu-trigger) {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.requirements-table :deep(td.el-table-column--selection .cell),
+.requirements-table :deep(th.el-table-column--selection .cell) {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.requirements-table :deep(.el-checkbox__inner) {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: 2px solid #c7d3e4;
+  background: #fff;
+}
+
+.requirements-table :deep(.el-checkbox__inner::after) {
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+}
+
+.requirements-table :deep(.el-checkbox__input.is-checked .el-checkbox__inner),
+.requirements-table :deep(.el-checkbox__input.is-indeterminate .el-checkbox__inner) {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.requirements-table :deep(.el-table__row .el-checkbox__input .el-checkbox__inner) {
+  opacity: 0.85;
+  transition: opacity 0.15s ease, border-color 0.15s ease;
+}
+
+.requirements-table :deep(.el-table__row:hover .el-checkbox__input .el-checkbox__inner) {
+  opacity: 1;
+  border-color: #8fb1ea;
+}
+
+.id-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 1px 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  background: #eef3f9;
+  border: 1px solid #d6e1ee;
+  line-height: 1.2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
 .top-actions {
@@ -2753,7 +2953,7 @@ onBeforeUnmount(() => {
 .filters-row-compact {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   width: 100%;
 }
@@ -2761,47 +2961,42 @@ onBeforeUnmount(() => {
 .filters-row-compact__label {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #64748b;
-  font-weight: 500;
-  padding-right: 2px;
+  gap: 10px;
+  font-size: 15px;
+  color: #475569;
+  font-weight: 600;
+  padding-right: 4px;
 }
 
 .filters-row-compact__icon {
-  width: 14px;
-  height: 14px;
-  color: #94a3b8;
+  width: 22px;
+  height: 22px;
+  color: #64748b;
   flex-shrink: 0;
 }
 
 .filters-row-compact__select {
-  width: 150px;
-  flex: 0 0 150px;
+  min-width: 180px;
+  flex: 0 1 auto;
+  width: auto;
 }
 
 .filters-row-compact__select :deep(.el-select__wrapper) {
-  min-height: 32px;
+  min-height: 36px;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 0 0 1px #e2e8f0 inset;
+  padding: 2px 12px;
 }
 
 .filters-row-compact__select :deep(.el-select__placeholder) {
   color: #64748b;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .filters-row-compact__select :deep(.el-select__selected-item) {
-  font-size: 13px;
+  font-size: 14px;
   color: #334155;
-}
-
-.selection-actions-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .search-input {
@@ -2816,31 +3011,42 @@ onBeforeUnmount(() => {
 }
 
 .status-select {
-  width: 180px;
-  flex: 0 0 180px;
-  min-width: 0;
+  min-width: 200px;
+  width: 200px;
+  flex: 0 1 200px;
 }
 
 .queue-select {
-  width: 170px;
-  flex: 0 0 170px;
-  min-width: 0;
+  min-width: 200px;
+  width: 200px;
+  flex: 0 1 200px;
 }
 
 .sequence-sort-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
 .sequence-sort-toggle__label {
-  font-size: 13px;
-  color: #4b5565;
+  font-size: 14px;
+  font-weight: 400;
+  color: #334155;
 }
 
 .sequence-sort-switch {
   flex-shrink: 0;
+}
+
+.toolbar-filter-switch--compact :deep(.el-switch__core) {
+  height: 16px;
+  min-width: 32px;
+}
+
+.toolbar-filter-switch--compact :deep(.el-switch__core::after) {
+  width: 12px;
+  height: 12px;
 }
 
 .cell-clamp {
@@ -2850,6 +3056,21 @@ onBeforeUnmount(() => {
   overflow: hidden;
   line-height: 1.35;
   word-break: break-word;
+}
+
+.line-clamp-2-cell {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.requirements-table :deep(td.sequence-col .cell) {
+  justify-content: center;
+  text-align: center;
 }
 
 .row-menu-trigger {

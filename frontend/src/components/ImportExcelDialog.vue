@@ -3,6 +3,7 @@
     :model-value="modelValue"
     :title="title"
     width="620px"
+    class="proposal-modal-theme"
     @close="emit('update:modelValue', false)"
   >
     <div class="import-body">

@@ -18,6 +18,7 @@
     :stage-number="dialogStageNumber"
     :initial-function="dialogInitialFunction"
     :readonly="!canEdit"
+    :lock-core-fields="true"
     :allow-links="authStore.canAccessExternalLinks"
     :show-requirements="true"
     v-model:loading="dialogLoading"

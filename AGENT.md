@@ -226,17 +226,76 @@ Frontend capability-флаги:
   - `superuser`.
 - Не утекли секреты/локальные uploads в git.
 
-## 11) UI референс spisok (для нового чата)
+## 11) UI референс `spiski` (таблица и карточки)
 
-Если задача про "сделать как в Figma/spisok", использовать:
-- опорный документ: `docs/SPISOK_UI_REFERENCE.md`;
-- источник референса: `C:/Users/D.Zinovev/Desktop/spisok`.
+Если задача формулируется как "сделать как в spiski / figma make", опираться на файлы:
+- `C:/Users/Danila/Downloads/spiski/src/app/RegistryPage.tsx` — orchestrator страницы реестра;
+- `C:/Users/Danila/Downloads/spiski/src/app/components/ColumnHeaders.tsx` — шапка табличного режима;
+- `C:/Users/Danila/Downloads/spiski/src/app/components/RequirementRowCard.tsx` — строка таблицы и карточный тон;
+- `C:/Users/Danila/Downloads/spiski/src/app/components/HeaderToolbar.tsx`, `FilterBar.tsx`, `BulkActionsBar.tsx`, `PaginationBar.tsx` — верхняя/нижняя обвязка.
 
-Порядок переноса в `RequirementsPage.vue`:
-1. `HeaderToolbar` (поиск/добавить/экспорт);
-2. `FilterBar` (ряд фильтров);
-3. `ColumnHeaders` + grid;
-4. `RequirementRowCard` (строка-как-компонент);
-5. `BulkActionsBar` и `PaginationBar`.
+### 11.1 Где в `spiski` таблица, а где карточки
 
-Важно: переносить только верстку/UX-паттерны, а данные и действия оставлять из текущего `requirements-app`.
+Точка переключения режима находится в:
+- `spiski/src/app/RegistryPage.tsx`
+
+Логика:
+- **Табличный вид (A)**:
+  - в `RegistryPage.tsx` отрисовываются `ColumnHeaders` + список `RequirementRowCard`;
+  - геометрия колонок задаётся в `ColumnHeaders.tsx` через `COL_STYLE`;
+  - поведение строки (hover, selected, actions, archived tone) — в `RequirementRowCard.tsx`.
+- **Карточный вид (B)**:
+  - используется тот же `RequirementRowCard`, но с веткой стилей для `variant === 'B'`;
+  - карточный визуал задаётся условными классами в `RequirementRowCard.tsx`;
+  - фильтры/поиск/пагинация/массовые действия остаются общими из `RegistryPage.tsx`.
+
+Практический вывод: в `spiski` таблица и карточки не разнесены по разным страницам, а являются двумя режимами одного и того же реестра.
+
+### 11.2 Где это в текущем `requirements-app`
+
+Текущая реализация экрана:
+- `frontend/src/pages/RequirementsPage.vue`
+
+Режимы:
+- **Таблица**: ветка `viewMode === 'table'` внутри `RequirementsPage.vue`
+  - основа: `el-table` + существующие бизнесовые действия/права;
+  - столбцы доменные (расширенные) для проекта requirements.
+- **Карточки**: ветка `viewMode === 'cards'` в том же `RequirementsPage.vue`
+  - карточный рендер и классы `requirement-list-card*`.
+
+Важные связанные компоненты:
+- `frontend/src/components/RequirementDetailsDrawer.vue` — открытие строки/карточки в детальном просмотре;
+- `frontend/src/components/StatusTag.vue`, `QueueTag.vue` — визуальные теги в таблице и карточках.
+
+### 11.3 Правила переноса из `spiski` в этот проект
+
+1. Переносить из `spiski` только:
+   - layout-сетку;
+   - типографику/spacing/цветовые паттерны;
+   - UX поведения (hover, selected, sticky header, bulk bar, pagination).
+2. Не переносить без адаптации:
+   - mock-данные;
+   - react state-handlers;
+   - action-меню, не совпадающее с RBAC и endpoint-ами текущего backend.
+3. Источник данных и действий всегда оставлять проектный:
+   - данные: `frontend/src/api/requirements.ts` + backend `requirement_handler.go`;
+   - права: `frontend/src/stores/auth.ts` + backend middleware grants.
+
+### 11.4 Чеклист для задачи "сделать как spiski"
+
+1. Зафиксировать, какой именно режим нужен: `A (таблица)` или `B (карточки)`.
+2. Сверить целевые столбцы с доменной моделью `Requirement`.
+3. Перенести только визуальный слой, не меняя бизнес-логику действий.
+4. Проверить:
+   - row click -> `RequirementDetailsDrawer`;
+   - selection mode + массовые действия;
+   - архивные тона строк/карточек;
+   - пагинацию, поиск и фильтры.
+5. Прогнать `npm run build` и smoke тест по ролям (`read/edit/superuser`).
+
+### 11.5 Короткая памятка для агента
+
+Если пользователь пишет "как в spiski":
+- сначала смотреть `spiski/src/app/RegistryPage.tsx`;
+- затем `ColumnHeaders.tsx` (таблица) и `RequirementRowCard.tsx` (таблица+карточки);
+- внедрять в `frontend/src/pages/RequirementsPage.vue`, сохраняя текущие столбцы и API проекта.

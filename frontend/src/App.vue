@@ -1,3 +1,5 @@
 <template>
-  <router-view />
+  <div class="app-content-wrap">
+    <router-view />
+  </div>
 </template>

@@ -2,7 +2,7 @@
   <el-dialog
     :model-value="modelValue"
     :title="dialogTitle"
-    class="gk-function-dialog"
+    class="gk-function-dialog proposal-modal-theme"
     width="min(1360px, 97vw)"
     top="4vh"
     destroy-on-close
@@ -15,13 +15,13 @@
             <h4 class="pane-title">Параметры функции</h4>
             <el-form label-position="top" class="form-grid form-grid--inline">
               <el-form-item label="Наименование функции">
-                <el-input v-model="form.functionName" :disabled="!canEdit" />
+                <el-input v-model="form.functionName" :disabled="!canEditCoreFields" />
               </el-form-item>
               <el-form-item label="Номер функции по НМЦК">
-                <el-input v-model="form.nmckFunctionNumber" placeholder="Например, 1.1.2" :disabled="!canEdit" />
+                <el-input v-model="form.nmckFunctionNumber" placeholder="Например, 1.1.2" :disabled="!canEditCoreFields" />
               </el-form-item>
               <el-form-item label="Номер раздела по ТЗ">
-                <el-input v-model="form.tzSectionNumber" :disabled="!canEdit" />
+                <el-input v-model="form.tzSectionNumber" :disabled="!canEditCoreFields" />
               </el-form-item>
             </el-form>
           </section>
@@ -183,10 +183,11 @@ const props = withDefaults(
     stageNumber: number
     initialFunction?: GKFunction | null
     readonly?: boolean
+    lockCoreFields?: boolean
     showRequirements?: boolean
     allowLinks?: boolean
   }>(),
-  { initialFunction: null, readonly: false, showRequirements: false, allowLinks: true },
+  { initialFunction: null, readonly: false, lockCoreFields: false, showRequirements: false, allowLinks: true },
 )
 
 const emit = defineEmits<{
@@ -196,6 +197,7 @@ const emit = defineEmits<{
 
 const loading = defineModel<boolean>('loading', { default: false })
 const canEdit = computed(() => !props.readonly)
+const canEditCoreFields = computed(() => canEdit.value && !props.lockCoreFields)
 const canSeeLinks = computed(() => !!props.allowLinks)
 const showRequirements = computed(() => !!props.showRequirements && !!props.contractId && !!props.initialFunction?.id)
 const activeTab = ref<'function' | 'requirements'>('function')
@@ -671,7 +673,7 @@ function toggleSearchSelection(id: number, checked: boolean) {
   display: inline-flex;
   align-items: center;
   min-height: 32px;
-  color: #1e4d7b;
+  color: var(--el-color-primary);
   text-decoration: underline;
   text-underline-offset: 2px;
   word-break: break-all;

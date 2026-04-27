@@ -593,7 +593,7 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   min-height: 32px;
-  color: #1e4d7b;
+  color: var(--el-color-primary);
   text-decoration: underline;
   text-underline-offset: 2px;
   word-break: break-all;

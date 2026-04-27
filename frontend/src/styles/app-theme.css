@@ -7,24 +7,24 @@
   --app-border: #d8dee8;
   --app-text: #1a2332;
   --app-text-muted: #5c6b7f;
-  --app-primary: #1e4d7b;
-  /* Наведение: чуть более светлый сине-морской тон, без «голубого» Element Plus */
-  --app-primary-hover: #2a5f90;
-  --app-primary-active: #163a5e;
+  --app-primary: #2563eb;
+  /* Единый синий в системе: как кнопка "Добавить запись" */
+  --app-primary-hover: #1d4ed8;
+  --app-primary-active: #1e40af;
   --app-accent: #2d6a4f;
   --app-radius-lg: 14px;
   --app-radius-md: 10px;
   --app-shadow: 0 4px 20px rgba(26, 35, 50, 0.06);
 
   /* Согласуем системный primary Element Plus с корпоративным синим (меньше голубых оттенков при hover) */
-  --el-color-primary: #1e4d7b;
-  --el-color-primary-dark-2: #163a5e;
-  --el-color-primary-light-3: #5078a0;
-  --el-color-primary-light-5: #7e9ab8;
-  --el-color-primary-light-7: #a8bbd0;
-  --el-color-primary-light-8: #c5d3e3;
-  --el-color-primary-light-9: #e2e9f2;
-  --el-color-primary-rgb: 30, 77, 123;
+  --el-color-primary: #2563eb;
+  --el-color-primary-dark-2: #1e40af;
+  --el-color-primary-light-3: #3b82f6;
+  --el-color-primary-light-5: #60a5fa;
+  --el-color-primary-light-7: #93c5fd;
+  --el-color-primary-light-8: #bfdbfe;
+  --el-color-primary-light-9: #dbeafe;
+  --el-color-primary-rgb: 37, 99, 235;
 }
 
 /* У кнопок убираем системную обводку в состоянии focus (в т.ч. после клика). */
@@ -44,6 +44,13 @@ body,
 body {
   margin: 0;
   background: var(--app-bg);
+}
+
+.app-content-wrap {
+  /* Внешние боковые отступы отключены: только локальные отступы внутри блоков страниц */
+  padding-left: 0;
+  padding-right: 0;
+  box-sizing: border-box;
 }
 
 /* Element Plus: кнопки — hover с приглушённо-синим оттенком, не небесно-голубым */
@@ -98,4 +105,156 @@ body {
 .el-table {
   --el-table-header-bg-color: #eef2f7;
   --el-table-header-text-color: var(--app-text);
+}
+
+/* Единая тема модалок «как в modal» для окон, связанных с предложениями. */
+.proposal-modal-theme.el-dialog {
+  border: 1px solid #dcdfe6;
+  border-radius: 10px;
+  overflow: hidden;
+  /* Серый фон на всё окно; шапка и подвал выделяются светлее */
+  background: #f5f7fa;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
+}
+
+.proposal-modal-theme .el-dialog__header {
+  margin: 0;
+  padding: 14px 18px;
+  background: #ffffff;
+  border-bottom: 1px solid #dcdfe6;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  align-self: stretch;
+}
+
+.proposal-modal-theme .el-dialog__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+  letter-spacing: 0.01em;
+}
+
+.proposal-modal-theme .el-dialog__headerbtn {
+  top: 12px;
+  right: 14px;
+}
+
+.proposal-modal-theme .el-dialog__body {
+  padding: 16px 18px;
+  background: #f5f7fa;
+}
+
+.proposal-modal-theme .el-dialog__footer {
+  padding: 12px 18px;
+  background: #f9fafb;
+  border-top: 1px solid #dcdfe6;
+}
+
+/* Карточка предложения, «Добавить предложение», детали ГК: без паддингов у оболочки dialog */
+.requirement-details-drawer.proposal-modal-theme.el-dialog,
+.requirement-details-drawer.proposal-modal-theme .el-dialog__header,
+.requirement-details-drawer.proposal-modal-theme .el-dialog__body,
+.requirement-details-drawer.proposal-modal-theme .el-dialog__footer,
+.gk-directory-detail-dialog.proposal-modal-theme.el-dialog,
+.gk-directory-detail-dialog.proposal-modal-theme .el-dialog__header,
+.gk-directory-detail-dialog.proposal-modal-theme .el-dialog__body,
+.gk-directory-detail-dialog.proposal-modal-theme .el-dialog__footer {
+  padding: 0 !important;
+}
+
+/* Модалка деталей ГК — тот же каркас, что у карточки предложения (ленивый chunk страницы ГК) */
+.gk-directory-detail-dialog.el-dialog {
+  max-height: 94vh;
+  height: 94vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f5f7fa;
+  border: 1px solid #dcdfe6;
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  padding: 0 !important;
+}
+
+.gk-directory-detail-dialog .el-dialog__header {
+  display: none;
+}
+
+.gk-directory-detail-dialog .el-dialog__body {
+  padding: 0 !important;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  max-height: calc(94vh - 74px);
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+}
+
+.el-overlay-dialog:has(.gk-directory-detail-dialog) {
+  overflow: hidden !important;
+}
+
+/* Детали ГК в правой колонке split (Figma 8:2, append-to на .gkd-detail-panel) */
+.gkd-detail-panel .el-overlay-dialog {
+  position: absolute !important;
+  inset: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.gkd-detail-panel .gk-directory-detail-dialog--dock.el-dialog {
+  margin: 0 !important;
+  height: 100%;
+  max-height: 100% !important;
+  width: 100% !important;
+  max-width: none !important;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.gkd-detail-panel .gk-directory-detail-dialog--dock .el-dialog__body {
+  max-height: none !important;
+  flex: 1;
+  min-height: 0;
+}
+
+.proposal-modal-dialog.proposal-modal-theme.el-dialog,
+.proposal-modal-dialog.proposal-modal-theme .el-dialog__header,
+.proposal-modal-dialog.proposal-modal-theme .el-dialog__body,
+.proposal-modal-dialog.proposal-modal-theme .el-dialog__footer {
+  padding: 0 !important;
+}
+
+.proposal-modal-theme .el-form-item {
+  margin-bottom: 14px;
+}
+
+.proposal-modal-theme .el-form-item__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #606266;
+  line-height: 1.4;
+}
+
+.proposal-modal-theme .el-input__wrapper,
+.proposal-modal-theme .el-select__wrapper,
+.proposal-modal-theme .el-textarea__inner,
+.proposal-modal-theme .el-date-editor.el-input__wrapper {
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px #dcdfe6 inset;
+  background: #ffffff;
+}
+
+.proposal-modal-theme .el-input__wrapper.is-focus,
+.proposal-modal-theme .el-select__wrapper.is-focused,
+.proposal-modal-theme .el-textarea__inner:focus,
+.proposal-modal-theme .el-date-editor.el-input__wrapper.is-focus {
+  box-shadow:
+    0 0 0 1px var(--el-color-primary) inset,
+    0 0 0 3px rgba(var(--el-color-primary-rgb), 0.14);
 }

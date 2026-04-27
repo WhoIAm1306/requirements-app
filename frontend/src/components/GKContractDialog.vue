@@ -43,7 +43,7 @@ const props = defineProps<{
   mode: 'create' | 'edit'
   initialContract: Pick<
     GKContractDetails,
-    'id' | 'name' | 'description' | 'shortName' | 'useShortNameInTaskId'
+    'id' | 'name' | 'description' | 'shortName' | 'useShortNameInTaskId' | 'isActive'
   > | null
 }>()
 
@@ -101,7 +101,10 @@ async function submit() {
       await createGKContract(payload)
       ElMessage.success('ГК создан')
     } else if (props.initialContract) {
-      await updateGKContract(props.initialContract.id, payload)
+      await updateGKContract(props.initialContract.id, {
+        ...payload,
+        ...(typeof props.initialContract.isActive === 'boolean' ? { isActive: props.initialContract.isActive } : {}),
+      })
       ElMessage.success('ГК обновлён')
     }
 

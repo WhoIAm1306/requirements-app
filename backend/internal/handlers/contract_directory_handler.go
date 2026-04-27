@@ -54,6 +54,8 @@ type UpdateContractRequest struct {
 	ShortName            string `json:"shortName"`
 	UseShortNameInTaskID bool   `json:"useShortNameInTaskId"`
 	Description          string `json:"description"`
+	// Если задано — смена признака «в архиве» (is_active в БД).
+	IsActive *bool `json:"isActive,omitempty"`
 }
 
 type ContractStageRequest struct {
@@ -348,6 +350,9 @@ func (h *ContractDirectoryHandler) UpdateContract(c *gin.Context) {
 	contract.ShortName = strings.TrimSpace(req.ShortName)
 	contract.UseShortNameInTaskID = req.UseShortNameInTaskID
 	contract.Description = strings.TrimSpace(req.Description)
+	if req.IsActive != nil {
+		contract.IsActive = *req.IsActive
+	}
 
 	if err := h.db.Save(&contract).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка обновления ГК"})

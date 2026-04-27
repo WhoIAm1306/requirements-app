@@ -110,6 +110,7 @@ func NewRequirementHandler(db *gorm.DB) *RequirementHandler {
 
 // applyRequirementTextSearch накладывает текстовый поиск по полям карточки (кроме отдельных фильтров
 // статус / очередь / архив в запросе остаются AND — поиск добавляет OR-группу в скобках).
+// Учитываются все текстовые поля записи, id/№ по порядку, даты (как в БД), комментарии и имена вложений.
 func applyRequirementTextSearch(db *gorm.DB, rawSearch string) *gorm.DB {
 	search := strings.TrimSpace(rawSearch)
 	if search == "" {
@@ -139,13 +140,31 @@ func applyRequirementTextSearch(db *gorm.DB, rawSearch string) *gorm.DB {
 		"archived_by",
 		"archived_by_org",
 		"dit_outgoing_number",
+		"archived_reason",
 	}
-	parts := make([]string, 0, len(fields))
-	args := make([]interface{}, 0, len(fields))
+	castLike := []string{
+		"CAST(id AS TEXT)",
+		"CAST(sequence_number AS TEXT)",
+		"CAST(created_at AS TEXT)",
+		"CAST(updated_at AS TEXT)",
+		"CAST(completed_at AS TEXT)",
+		"CAST(dit_outgoing_date AS TEXT)",
+		"CAST(archived_at AS TEXT)",
+	}
+	parts := make([]string, 0, len(fields)+len(castLike)+2)
+	args := make([]interface{}, 0, len(fields)+len(castLike)+5)
 	for _, f := range fields {
 		parts = append(parts, f+" ILIKE ?")
 		args = append(args, like)
 	}
+	for _, expr := range castLike {
+		parts = append(parts, expr+" ILIKE ?")
+		args = append(args, like)
+	}
+	parts = append(parts, `EXISTS (SELECT 1 FROM comments c WHERE c.requirement_id = requirements.id AND (c.comment_text ILIKE ? OR c.author_name ILIKE ? OR c.author_org ILIKE ?))`)
+	args = append(args, like, like, like)
+	parts = append(parts, `EXISTS (SELECT 1 FROM requirement_attachments ra INNER JOIN requirement_attachment_libraries lib ON lib.id = ra.library_file_id WHERE ra.requirement_id = requirements.id AND lib.original_file_name ILIKE ?)`)
+	args = append(args, like)
 	sql := "(" + strings.Join(parts, " OR ") + ")"
 	return db.Where(sql, args...)
 }
