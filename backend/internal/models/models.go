@@ -115,6 +115,8 @@ type QueueDictionary struct {
 type ContractDictionary struct {
 	ID   uint   `gorm:"primaryKey" json:"id"`
 	Name string `gorm:"size:255;uniqueIndex" json:"name"`
+	// Number — номер/код ГК для отображения и редактирования.
+	Number string `gorm:"size:120;index" json:"number"`
 	// ShortName — краткое наименование для отображения и (опционально) для идентификатора ПОВ.
 	ShortName string `gorm:"size:120" json:"shortName"`
 	// UseShortNameInTaskID — учитывать краткое наименование в идентификаторе: ПОВ.<краткое>.<очередь>.<порядок>.
@@ -192,4 +194,13 @@ type User struct {
 	IsActive          bool      `gorm:"default:true" json:"isActive"`
 	CreatedAt         time.Time `json:"createdAt"`
 	UpdatedAt         time.Time `json:"updatedAt"`
+}
+
+// AppSetting — key/value хранилище глобальных настроек приложения.
+type AppSetting struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Key       string    `gorm:"size:100;uniqueIndex" json:"key"`
+	Value     string    `gorm:"type:text" json:"value"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }

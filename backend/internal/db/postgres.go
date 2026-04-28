@@ -45,6 +45,7 @@ func NewPostgres(cfg *config.Config) (*gorm.DB, error) {
 		&models.RequirementAttachmentLibrary{},
 		&models.RequirementAttachment{},
 		&models.User{},
+		&models.AppSetting{},
 	)
 	if err != nil {
 		return nil, err

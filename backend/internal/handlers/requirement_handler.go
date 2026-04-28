@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,6 +14,7 @@ import (
 	"unicode"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 
@@ -597,6 +600,9 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 	}
 
 	sys := normalizeRequirementSystemType(req.SystemType)
+	if sys == "" {
+		sys = "112"
+	}
 	if err := validateRequirementSystemType(sys); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
@@ -661,8 +667,9 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 	}
 
 	// П.п. ТЗ и НМЦК из выбранной функции справочника.
+	// В карточке храним только номера пунктов без добавления названия функции.
 	if selectedFunction != nil {
-		item.TZPointText = fmt.Sprintf("%s — %s", strings.TrimSpace(selectedFunction.TZSectionNumber), strings.TrimSpace(selectedFunction.FunctionName))
+		item.TZPointText = strings.TrimSpace(selectedFunction.TZSectionNumber)
 		item.NmckPointText = strings.TrimSpace(selectedFunction.NMCKFunctionNumber)
 	}
 
@@ -683,8 +690,13 @@ func (h *RequirementHandler) Create(c *gin.Context) {
 
 func (h *RequirementHandler) Update(c *gin.Context) {
 	var req UpdateRequirementRequest
+	var raw map[string]json.RawMessage
 
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindBodyWith(&req, binding.JSON); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный запрос"})
+		return
+	}
+	if err := c.ShouldBindBodyWith(&raw, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный запрос"})
 		return
 	}
@@ -746,6 +758,12 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 	}
 
 	sys := normalizeRequirementSystemType(req.SystemType)
+	if sys == "" {
+		sys = normalizeRequirementSystemType(item.SystemType)
+	}
+	if sys == "" {
+		sys = "112"
+	}
 	if err := validateRequirementSystemType(sys); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
@@ -811,7 +829,7 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 	item.DiscussionSummary = strings.TrimSpace(req.DiscussionSummary)
 	item.ImplementationQueue = newQueue
 	item.NoteText = strings.TrimSpace(req.NoteText)
-	// Выбор функции ТЗ переопределяет Пункт ТЗ.
+		// Выбор функции ТЗ переопределяет Пункты только их номерами.
 	if req.ContractTZFunctionID != nil {
 		var contract models.ContractDictionary
 		if err := h.db.Where("LOWER(name) = LOWER(?)", contractName).First(&contract).Error; err != nil {
@@ -830,7 +848,7 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 		}
 
 		item.ContractTZFunctionID = req.ContractTZFunctionID
-		item.TZPointText = fmt.Sprintf("%s — %s", strings.TrimSpace(fn.TZSectionNumber), strings.TrimSpace(fn.FunctionName))
+		item.TZPointText = strings.TrimSpace(fn.TZSectionNumber)
 		item.NmckPointText = strings.TrimSpace(fn.NMCKFunctionNumber)
 	} else {
 		item.ContractTZFunctionID = nil
@@ -849,8 +867,14 @@ func (h *RequirementHandler) Update(c *gin.Context) {
 	}
 	newStatus := item.StatusText
 
-	if req.CompletedAt != nil {
-		item.CompletedAt = req.CompletedAt
+	completedAtRaw, hasCompletedAt := raw["completedAt"]
+	completedAtExplicitNull := hasCompletedAt && bytes.Equal(bytes.TrimSpace(completedAtRaw), []byte("null"))
+	if hasCompletedAt {
+		if completedAtExplicitNull {
+			item.CompletedAt = nil
+		} else if req.CompletedAt != nil {
+			item.CompletedAt = req.CompletedAt
+		}
 	} else if newStatus == "Выполнено" && oldStatus != "Выполнено" && item.CompletedAt == nil {
 		t := time.Now()
 		item.CompletedAt = &t

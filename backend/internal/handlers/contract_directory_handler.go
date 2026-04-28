@@ -22,6 +22,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const jiraAPISettingsKey = "jira_api_credentials"
+
 type ContractDirectoryHandler struct {
 	db              *gorm.DB
 	jiraBaseURL     string
@@ -29,6 +31,12 @@ type ContractDirectoryHandler struct {
 	jiraUserEmail   string
 	jiraAPIToken    string
 	httpClient      *http.Client
+}
+
+type jiraAPISettings struct {
+	UserEmail   string `json:"userEmail"`
+	APIToken    string `json:"apiToken"`
+	BearerToken string `json:"bearerToken"`
 }
 
 func NewContractDirectoryHandler(db *gorm.DB, cfg *config.Config) *ContractDirectoryHandler {
@@ -44,13 +52,16 @@ func NewContractDirectoryHandler(db *gorm.DB, cfg *config.Config) *ContractDirec
 
 type CreateContractRequest struct {
 	Name                 string `json:"name"`
+	Number               string `json:"number"`
 	ShortName            string `json:"shortName"`
 	UseShortNameInTaskID bool   `json:"useShortNameInTaskId"`
 	Description          string `json:"description"`
+	IsActive             bool   `json:"isActive"`
 }
 
 type UpdateContractRequest struct {
 	Name                 string `json:"name"`
+	Number               string `json:"number"`
 	ShortName            string `json:"shortName"`
 	UseShortNameInTaskID bool   `json:"useShortNameInTaskId"`
 	Description          string `json:"description"`
@@ -259,6 +270,7 @@ func (h *ContractDirectoryHandler) GetContractDetails(c *gin.Context) {
 	type contractDTO struct {
 		ID                   uint                   `json:"id"`
 		Name                 string                 `json:"name"`
+		Number               string                 `json:"number"`
 		ShortName            string                 `json:"shortName"`
 		UseShortNameInTaskID bool                   `json:"useShortNameInTaskId"`
 		Description          string                 `json:"description"`
@@ -270,6 +282,7 @@ func (h *ContractDirectoryHandler) GetContractDetails(c *gin.Context) {
 	c.JSON(http.StatusOK, contractDTO{
 		ID:                   contract.ID,
 		Name:                 contract.Name,
+		Number:               contract.Number,
 		ShortName:            contract.ShortName,
 		UseShortNameInTaskID: contract.UseShortNameInTaskID,
 		Description:          contract.Description,
@@ -302,8 +315,10 @@ func (h *ContractDirectoryHandler) CreateContract(c *gin.Context) {
 	// If exists - обновляем описание и поля краткого наименования.
 	if existing != nil {
 		existing.Description = strings.TrimSpace(req.Description)
+		existing.Number = strings.TrimSpace(req.Number)
 		existing.ShortName = strings.TrimSpace(req.ShortName)
 		existing.UseShortNameInTaskID = req.UseShortNameInTaskID
+		existing.IsActive = req.IsActive
 		if err := h.db.Save(existing).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка обновления ГК"})
 			return
@@ -314,10 +329,11 @@ func (h *ContractDirectoryHandler) CreateContract(c *gin.Context) {
 
 	item := models.ContractDictionary{
 		Name:                 req.Name,
+		Number:               strings.TrimSpace(req.Number),
 		ShortName:            strings.TrimSpace(req.ShortName),
 		UseShortNameInTaskID: req.UseShortNameInTaskID,
 		Description:          strings.TrimSpace(req.Description),
-		IsActive:             true,
+		IsActive:             req.IsActive,
 	}
 	if err := h.db.Create(&item).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка создания ГК"})
@@ -347,6 +363,7 @@ func (h *ContractDirectoryHandler) UpdateContract(c *gin.Context) {
 	}
 
 	contract.Name = req.Name
+	contract.Number = strings.TrimSpace(req.Number)
 	contract.ShortName = strings.TrimSpace(req.ShortName)
 	contract.UseShortNameInTaskID = req.UseShortNameInTaskID
 	contract.Description = strings.TrimSpace(req.Description)
@@ -820,6 +837,35 @@ func normalizeJiraEpicLinks(fn models.ContractTZFunction) []string {
 	return normalizeLinks(links)
 }
 
+func (h *ContractDirectoryHandler) getJiraCredentials() (string, string) {
+	var setting models.AppSetting
+	if err := h.db.Where("key = ?", jiraAPISettingsKey).First(&setting).Error; err == nil {
+		var payload jiraAPISettings
+		if jsonErr := json.Unmarshal([]byte(setting.Value), &payload); jsonErr == nil {
+			email := strings.TrimSpace(payload.UserEmail)
+			token := strings.TrimSpace(payload.APIToken)
+			if email != "" && token != "" {
+				return email, token
+			}
+		}
+	}
+	return strings.TrimSpace(h.jiraUserEmail), strings.TrimSpace(h.jiraAPIToken)
+}
+
+func (h *ContractDirectoryHandler) getJiraBearerToken() string {
+	var setting models.AppSetting
+	if err := h.db.Where("key = ?", jiraAPISettingsKey).First(&setting).Error; err == nil {
+		var payload jiraAPISettings
+		if jsonErr := json.Unmarshal([]byte(setting.Value), &payload); jsonErr == nil {
+			token := strings.TrimSpace(payload.BearerToken)
+			if token != "" {
+				return token
+			}
+		}
+	}
+	return strings.TrimSpace(h.jiraBearerToken)
+}
+
 type jiraIssueResponse struct {
 	Fields struct {
 		Summary string `json:"summary"`
@@ -843,13 +889,16 @@ func (h *ContractDirectoryHandler) fetchJiraEpicIssue(epicKey string) (*jiraIssu
 	}
 	req.Header.Set("Accept", "application/json")
 
-	if h.jiraBearerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+h.jiraBearerToken)
-	} else if h.jiraUserEmail != "" && h.jiraAPIToken != "" {
-		token := base64.StdEncoding.EncodeToString([]byte(h.jiraUserEmail + ":" + h.jiraAPIToken))
+	jiraBearerToken := h.getJiraBearerToken()
+	jiraUserEmail, jiraAPIToken := h.getJiraCredentials()
+	// Приоритет: Bearer PAT, затем Basic (логин/email + token).
+	if jiraBearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+jiraBearerToken)
+	} else if jiraUserEmail != "" && jiraAPIToken != "" {
+		token := base64.StdEncoding.EncodeToString([]byte(jiraUserEmail + ":" + jiraAPIToken))
 		req.Header.Set("Authorization", "Basic "+token)
 	} else {
-		return nil, fmt.Errorf("не заданы креды Jira")
+		return nil, fmt.Errorf("не заданы креды Jira (bearer token или email+api token)")
 	}
 
 	resp, err := h.httpClient.Do(req)
@@ -859,7 +908,12 @@ func (h *ContractDirectoryHandler) fetchJiraEpicIssue(epicKey string) (*jiraIssu
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("jira вернула статус %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		msg := strings.TrimSpace(string(body))
+		if msg == "" {
+			return nil, fmt.Errorf("jira вернула статус %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("jira вернула статус %d: %s", resp.StatusCode, msg)
 	}
 
 	var out jiraIssueResponse

@@ -159,6 +159,8 @@ func main() {
 		admin.PUT("/users/:id", userHandler.UpdateUser)
 		admin.DELETE("/users/:id", userHandler.DeleteUser)
 		admin.DELETE("/requirements", requirementHandler.DeleteAll)
+		admin.GET("/actions/jira-api", userHandler.GetJiraAPIConfig)
+		admin.POST("/actions/jira-api", userHandler.SaveJiraAPIConfig)
 	}
 
 	// Раздача собранного фронтенда, если он существует.

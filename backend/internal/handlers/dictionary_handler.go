@@ -289,6 +289,7 @@ func (h *DictionaryHandler) SearchContracts(c *gin.Context) {
 type contractListRow struct {
 	ID                   uint      `json:"id"`
 	Name                 string    `json:"name"`
+	Number               string    `json:"number"`
 	ShortName            string    `json:"shortName"`
 	UseShortNameInTaskID bool      `json:"useShortNameInTaskId"`
 	Description          string    `json:"description"`
@@ -355,6 +356,7 @@ func (h *DictionaryHandler) ListContracts(c *gin.Context) {
 		out = append(out, contractListRow{
 			ID:                   c.ID,
 			Name:                 c.Name,
+			Number:               c.Number,
 			ShortName:            c.ShortName,
 			UseShortNameInTaskID: c.UseShortNameInTaskID,
 			Description:          c.Description,

@@ -4,6 +4,14 @@ backend/app
 backend/*.exe
 # Локальные загрузки при запуске из backend/cmd/app (не коммитить бинарники)
 backend/cmd/app/uploads/
+# Загруженные файлы из приложения (не коммитить)
+backend/uploads/
+
+# Корневой .env (секреты) — не коммитить
+/.env
+
+# modal (локальные зависимости)
+modal/node_modules/
 
 # frontend
 frontend/node_modules

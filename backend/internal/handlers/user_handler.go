@@ -71,6 +71,22 @@ type UserImportResult struct {
 	Errors  []string `json:"errors"`
 }
 
+type JiraAPIConfigResponse struct {
+	UserEmail      string `json:"userEmail"`
+	HasToken       bool   `json:"hasToken"`
+	HasBearerToken bool   `json:"hasBearerToken"`
+	PreferredAuth  string `json:"preferredAuth"`
+}
+
+type SaveJiraAPIConfigRequest struct {
+	UserEmail     string `json:"userEmail"`
+	APIToken      string `json:"apiToken"`
+	BearerToken   string `json:"bearerToken"`
+	PreferredAuth string `json:"preferredAuth"`
+}
+
+const jiraAPISettingsStorageKey = "jira_api_credentials"
+
 func decodeUserGrantsJSON(raw string) map[string]bool {
 	out := map[string]bool{}
 	raw = strings.TrimSpace(raw)
@@ -527,4 +543,94 @@ func (h *UserHandler) ImportUsersFromExcel(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+// GetJiraAPIConfig — возвращает сохраненную конфигурацию Jira API (без токена).
+func (h *UserHandler) GetJiraAPIConfig(c *gin.Context) {
+	var setting models.AppSetting
+	if err := h.db.Where("key = ?", jiraAPISettingsStorageKey).First(&setting).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusOK, JiraAPIConfigResponse{})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка чтения Jira настроек"})
+		return
+	}
+
+	var payload SaveJiraAPIConfigRequest
+	if err := json.Unmarshal([]byte(setting.Value), &payload); err != nil {
+		c.JSON(http.StatusOK, JiraAPIConfigResponse{})
+		return
+	}
+
+	c.JSON(http.StatusOK, JiraAPIConfigResponse{
+		UserEmail:      strings.TrimSpace(payload.UserEmail),
+		HasToken:       strings.TrimSpace(payload.APIToken) != "",
+		HasBearerToken: strings.TrimSpace(payload.BearerToken) != "",
+		PreferredAuth:  strings.TrimSpace(payload.PreferredAuth),
+	})
+}
+
+// SaveJiraAPIConfig — сохраняет глобальные Jira credentials для всех пользователей.
+func (h *UserHandler) SaveJiraAPIConfig(c *gin.Context) {
+	var req SaveJiraAPIConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный запрос"})
+		return
+	}
+
+	req.UserEmail = strings.TrimSpace(strings.ToLower(req.UserEmail))
+	req.APIToken = strings.TrimSpace(req.APIToken)
+	req.BearerToken = strings.TrimSpace(req.BearerToken)
+	req.PreferredAuth = strings.TrimSpace(strings.ToLower(req.PreferredAuth))
+	if req.PreferredAuth == "" {
+		if req.BearerToken != "" {
+			req.PreferredAuth = "bearer"
+		} else {
+			req.PreferredAuth = "basic"
+		}
+	}
+	if req.PreferredAuth != "bearer" && req.PreferredAuth != "basic" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Некорректный тип авторизации Jira"})
+		return
+	}
+	if req.PreferredAuth == "bearer" && req.BearerToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Укажите Bearer PAT Jira"})
+		return
+	}
+	if req.PreferredAuth == "basic" && (req.UserEmail == "" || req.APIToken == "") {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Укажите логин/email и API token Jira"})
+		return
+	}
+
+	raw, err := json.Marshal(req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка сохранения Jira настроек"})
+		return
+	}
+
+	var setting models.AppSetting
+	if err := h.db.Where("key = ?", jiraAPISettingsStorageKey).First(&setting).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			item := models.AppSetting{
+				Key:   jiraAPISettingsStorageKey,
+				Value: string(raw),
+			}
+			if createErr := h.db.Create(&item).Error; createErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка сохранения Jira настроек"})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка сохранения Jira настроек"})
+			return
+		}
+	} else {
+		setting.Value = string(raw)
+		if saveErr := h.db.Save(&setting).Error; saveErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Ошибка сохранения Jira настроек"})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Jira API подключена"})
 }

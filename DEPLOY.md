@@ -7,7 +7,7 @@
 ## Что получится
 
 - **Backend**: Go (Gin), порт по умолчанию `8080`.
-- **Frontend**: собранный Vue SPA; в продакшене отдаётся **тем же процессом**, что и API: статика из каталога `frontend-dist`, маршруты `/api/*` — API (см. `backend/cmd/app/main.go`).
+- **Frontend**: собранный React SPA; в продакшене отдаётся **тем же процессом**, что и API: статика из каталога `frontend-dist`, маршруты `/api/*` — API (см. `backend/cmd/app/main.go`).
 - **База**: PostgreSQL 16.
 
 При доступе с одного хоста (например `http://IP:8080`) фронтенд обращается к API по пути **`/api`** — это соответствует `VITE_API_BASE_URL=/api` при сборке образа.
@@ -127,13 +127,12 @@ go build -o requirements-app ./cmd/app
 
 Скопируйте `backend/.env.example` → `backend/.env` (или положите `.env` рядом с бинарником при запуске из каталога `backend`), заполните `DB_*`, `JWT_SECRET`, `FRONTEND_ORIGIN`, суперпользователя.
 
-### 3. Frontend
+### 3. Frontend (React)
 
 На машине с Node.js:
 
 ```bash
-cd frontend
-cp .env.production.example .env.production   # при необходимости поправьте VITE_API_BASE_URL
+cd frontend-react
 npm ci
 npm run build
 ```

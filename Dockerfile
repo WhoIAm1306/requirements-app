@@ -1,11 +1,11 @@
-# Сборка одного образа: API (Go) + статика фронта (Vue) в frontend-dist для Gin.
+# Сборка одного образа: API (Go) + статика фронта (React) в frontend-dist для Gin.
 # Сборка из корня репозитория: docker build -t requirements-app .
 
 FROM node:22-alpine AS frontend
 WORKDIR /src
-COPY frontend/package.json frontend/package-lock.json* ./
+COPY frontend-react/package.json frontend-react/package-lock.json* ./
 RUN npm ci
-COPY frontend/ ./
+COPY frontend-react/ ./
 ENV VITE_API_BASE_URL=/api
 RUN npm run build
 
